@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 public class MusicEventResponse {
 
     private Long id;
+    private String username;
     private String note;
     private String instrument;
     private Integer volume;
@@ -19,6 +20,7 @@ public class MusicEventResponse {
     public static MusicEventResponse from(MusicEvent event) {
         return MusicEventResponse.builder()
                 .id(event.getId())
+                .username(event.getUser().getUsername())
                 .note(event.getNote())
                 .instrument(event.getInstrument())
                 .volume(event.getVolume())

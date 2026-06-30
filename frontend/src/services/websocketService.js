@@ -1,13 +1,12 @@
 import { Client } from '@stomp/stompjs'
-import SockJS from 'sockjs-client'
 
-const WS_URL = import.meta.env.VITE_WS_BASE_URL || 'http://localhost:8080/ws'
+const WS_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8080/ws'
 
 let stompClient = null
 
 export function connectWebSocket({ onNote, onConnect, onDisconnect }) {
   stompClient = new Client({
-    webSocketFactory: () => new SockJS(WS_URL),
+    brokerURL: WS_URL,
     reconnectDelay: 3000,
     onConnect: () => {
       stompClient.subscribe('/topic/notes', (message) => {
