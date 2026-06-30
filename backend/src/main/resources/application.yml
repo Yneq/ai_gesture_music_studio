@@ -1,0 +1,36 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gesture-music-studio
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/${DB_NAME:gesture_music_studio}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # Step 1 開發階段先用 update 讓 Hibernate 自動建表。
+      # 之後若要更嚴謹(避免 update 意外改壞 schema),可以換成 Flyway/Liquibase migration。
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+
+logging:
+  level:
+    org.hibernate.SQL: debug
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:gesture-music-studio-dev-secret-change-in-production-min-32-chars}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  gesture:
+    debounce-cooldown-ms: 500

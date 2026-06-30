@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Claude Code
+.claude/
+
+# Python
+gesture_ai/.venv/
+gesture_ai/__pycache__/
+gesture_ai/models/
+**/__pycache__/
+*.pyc
+
+# Java / Maven
+backend/target/
+
+# Node.js
+frontend/node_modules/
+frontend/dist/
+
+# Env / secrets
+.env
+*.env.local
