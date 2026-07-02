@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 import { useDashboardStore, DRUM_LABELS } from '../stores/dashboardStore'
 import GestureCamera from '../components/GestureCamera.vue'
+import LayoutEditor from '../components/LayoutEditor.vue'
 
 const auth = useAuthStore()
 const dashboard = useDashboardStore()
@@ -11,6 +12,7 @@ const router = useRouter()
 
 const cameraRef = ref(null)
 const cameraStatus = ref('idle')
+const showLayoutEditor = ref(false)
 
 // ── Resizable left panel ──────────────────────────────────────────────────────
 const mainRef = ref(null)
@@ -46,6 +48,7 @@ function onDragEnd() {
 onMounted(async () => {
   dashboard.connect()
   dashboard.fetchRecentGestures()
+  dashboard.fetchLayouts()
   await nextTick()
   cameraRef.value?.start()
 })
@@ -141,6 +144,12 @@ const GESTURE_EMOJI = {
           </button>
         </div>
 
+        <!-- Layout editor button -->
+        <button @click="showLayoutEditor = true"
+          class="w-full text-sm font-semibold rounded-xl py-2 bg-slate-600 hover:bg-slate-500 text-white transition-colors shrink-0">
+          🎵 自訂音階
+        </button>
+
         <!-- Canon + Gesture buttons -->
         <div class="grid grid-cols-2 gap-2 shrink-0">
           <button
@@ -230,4 +239,6 @@ const GESTURE_EMOJI = {
     </main>
 
   </div>
+
+  <LayoutEditor v-model="showLayoutEditor" />
 </template>

@@ -251,6 +251,8 @@ export const useDashboardStore = defineStore('dashboard', {
     recentGestures: [],
     canonPlaying: false,
     gestureVolume: 1.0,
+    activeNotes: ['C4','D4','E4','F4','G4','A4','B4','C5'],
+    savedLayouts: [],   // [{ id, name, notes[] }]
   }),
 
   getters: {
@@ -286,6 +288,33 @@ export const useDashboardStore = defineStore('dashboard', {
         const Tone = await import('tone')
         await ensureInstrument(Tone, instrument)
       }
+    },
+
+    setActiveNotes(notes) {
+      this.activeNotes = notes
+    },
+
+    async fetchLayouts() {
+      try {
+        const { data } = await apiClient.get('/layouts')
+        this.savedLayouts = data.map(l => {
+          const parsed = JSON.parse(l.layoutJson)
+          return { id: l.id, name: parsed.name ?? '未命名', notes: parsed.notes }
+        })
+      } catch { /* ignore */ }
+    },
+
+    async saveLayout(name) {
+      const { data } = await apiClient.post('/layouts', {
+        layoutJson: JSON.stringify({ name, notes: this.activeNotes }),
+      })
+      const parsed = JSON.parse(data.layoutJson)
+      this.savedLayouts.push({ id: data.id, name: parsed.name, notes: parsed.notes })
+    },
+
+    async deleteLayout(id) {
+      await apiClient.delete(`/layouts/${id}`)
+      this.savedLayouts = this.savedLayouts.filter(l => l.id !== id)
     },
 
     setGestureVolume(vol) {

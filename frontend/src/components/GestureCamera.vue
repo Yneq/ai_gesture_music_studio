@@ -18,7 +18,7 @@ const siteOrigin = location.origin
 
 watch(status, v => emit('status', v))
 
-const NOTES = ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5']
+// NOTES comes from the store so the ring updates when user edits the layout
 const INNER = 0.12
 const OUTER = 0.38
 const DEBOUNCE_MS = 500
@@ -40,7 +40,7 @@ const SWIPE_COOLDOWN = 1200
 // Volume knob state
 let smoothedVol = 1.0
 let prevPalmAngle = null          // null = not tracking (hand absent or wrong gesture)
-const VOL_SENSITIVITY = 0.45 / Math.PI  // 180° rotation ≈ 45% volume change
+const VOL_SENSITIVITY = 0.75 / Math.PI  // 180° rotation ≈ 75% volume change
 
 // ─── Note zone helpers ────────────────────────────────────────────────────────
 
@@ -51,7 +51,7 @@ function noteAtPosition(rawX, rawY) {
   if (dist < INNER || dist > OUTER) return null
   let angle = Math.atan2(dy, dx) + Math.PI / 2
   if (angle < 0) angle += 2 * Math.PI
-  return NOTES[Math.floor((angle / (2 * Math.PI)) * 8) % 8]
+  return dashboard.activeNotes[Math.floor((angle / (2 * Math.PI)) * 8) % 8]
 }
 
 function noteAtCanvasPos(e) {
@@ -65,7 +65,7 @@ function noteAtCanvasPos(e) {
   if (dist < INNER || dist > OUTER) return null
   let angle = Math.atan2(dy, dx) + Math.PI / 2
   if (angle < 0) angle += 2 * Math.PI
-  return NOTES[Math.floor((angle / (2 * Math.PI)) * 8) % 8]
+  return dashboard.activeNotes[Math.floor((angle / (2 * Math.PI)) * 8) % 8]
 }
 
 // ─── Canvas drawing ───────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ function drawRing(ctx, W, H, highlightNote = null) {
   ctx.font = `bold ${Math.round(minDim * 0.055)}px monospace`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  NOTES.forEach((note, i) => {
+  dashboard.activeNotes.forEach((note, i) => {
     const a = ((i + 0.5) / 8) * 2 * Math.PI - Math.PI / 2
     ctx.fillStyle = note === highlightNote ? '#34d399' : 'white'
     ctx.shadowColor = 'rgba(0,0,0,0.8)'
