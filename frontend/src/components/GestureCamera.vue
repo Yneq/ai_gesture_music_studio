@@ -37,9 +37,10 @@ const WRIST_BUF = 8
 const SWIPE_DELTA = 0.13  // 13% of frame width needed
 const SWIPE_COOLDOWN = 1200
 
-// Volume smoothing
+// Volume knob state
 let smoothedVol = 1.0
-const VOL_ALPHA = 0.12   // exponential moving average weight
+let prevPalmAngle = null          // null = not tracking (hand absent or wrong gesture)
+const VOL_SENSITIVITY = 0.45 / Math.PI  // 180° rotation ≈ 45% volume change
 
 // ─── Note zone helpers ────────────────────────────────────────────────────────
 
@@ -290,18 +291,30 @@ function detectLoop() {
         const ctx = canvasRef.value?.getContext('2d')
         const W = canvasRef.value?.width, H = canvasRef.value?.height
 
-        // ── 1. Rotation volume: Open_Palm + wrist tilt controls volume ────────
-        // wrist (0) → middle finger base (9), mirrored to match display
-        // clockwise = louder, counter-clockwise = quieter  (±70° maps to 0–1)
+        // ── 1. Rotation volume: Open_Palm + wrist rotation (delta-based knob) ──
+        // Wrist (0) → middle finger base (9), mirrored to match display.
+        // Each frame computes angle delta and accumulates it into smoothedVol,
+        // so multiple rotations in the same direction keep raising/lowering volume.
         if (gesture === 'Open_Palm') {
-          const canvasDx = (1 - lm[9].x) - (1 - lm[0].x)   // mirrored x delta
+          const canvasDx = (1 - lm[9].x) - (1 - lm[0].x)
           const dy = lm[9].y - lm[0].y
-          const angle = Math.atan2(canvasDx, -dy)             // 0 = up, + = CW
-          const DEG70 = 70 * Math.PI / 180
-          const targetVol = Math.min(1, Math.max(0, (angle + DEG70) / (2 * DEG70)))
-          smoothedVol = smoothedVol * (1 - VOL_ALPHA) + targetVol * VOL_ALPHA
-          dashboard.setGestureVolume(smoothedVol)
-          if (ctx && W && H) drawVolumeFeedback(ctx, lm, W, H, smoothedVol, angle * 180 / Math.PI)
+          const angle = Math.atan2(canvasDx, -dy)   // 0 = up, +CW, -CCW
+
+          if (prevPalmAngle !== null) {
+            let delta = angle - prevPalmAngle
+            // Wrap-around normalisation: keep delta in [-π, π]
+            if (delta > Math.PI)  delta -= 2 * Math.PI
+            if (delta < -Math.PI) delta += 2 * Math.PI
+            // Dead zone: ignore micro-tremors
+            if (Math.abs(delta) > 0.008) {
+              smoothedVol = Math.min(1, Math.max(0, smoothedVol + delta * VOL_SENSITIVITY))
+              dashboard.setGestureVolume(smoothedVol)
+            }
+          }
+          prevPalmAngle = angle
+          if (ctx && W && H) drawVolumeFeedback(ctx, lm, W, H, smoothedVol, 0)
+        } else {
+          prevPalmAngle = null   // reset when gesture changes, so re-entry is clean
         }
 
         // ── 2. Swipe (Closed_Fist) → cycle instrument ─────────────────────────
@@ -343,6 +356,7 @@ function detectLoop() {
       } else {
         drawOverlay(null)
         wristBuffer = []
+        prevPalmAngle = null
       }
     }
     rafId = requestAnimationFrame(frame)
