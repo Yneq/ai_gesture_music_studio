@@ -144,21 +144,15 @@ const GESTURE_EMOJI = {
           </button>
         </div>
 
-        <!-- Layout editor button -->
-        <button @click="showLayoutEditor = true"
-          class="w-full text-sm font-semibold rounded-xl py-2 bg-slate-600 hover:bg-slate-500 text-white transition-colors shrink-0">
-          🎵 自訂音階
-        </button>
-
-        <!-- Canon + Gesture buttons -->
-        <div class="grid grid-cols-2 gap-2 shrink-0">
+        <!-- Canon · Gesture · Layout (one row, no height increase) -->
+        <div class="grid grid-cols-3 gap-2 shrink-0">
           <button
             @click="dashboard.canonPlaying ? dashboard.stopCanon() : dashboard.playCanon()"
             class="text-sm font-semibold rounded-xl py-2 transition-colors"
             :class="dashboard.canonPlaying
               ? 'bg-rose-600 hover:bg-rose-500 text-white'
               : 'bg-amber-600 hover:bg-amber-500 text-white'">
-            {{ dashboard.canonPlaying ? '⏹ 卡農' : '🎼 彈卡農' }}
+            {{ dashboard.canonPlaying ? '⏹ 卡農' : '🎼 卡農' }}
           </button>
           <button
             @click="cameraStatus === 'running' ? cameraRef.stop() : cameraRef.start()"
@@ -169,9 +163,13 @@ const GESTURE_EMOJI = {
               : 'bg-slate-600 hover:bg-slate-500 text-white'">
             <span v-if="cameraStatus === 'starting'">載入中…</span>
             <span v-else-if="cameraStatus === 'running'" class="flex items-center justify-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-rose-400 animate-pulse"></span>停止手勢
+              <span class="w-2 h-2 rounded-full bg-rose-400 animate-pulse"></span>停止
             </span>
-            <span v-else>📷 開啟手勢</span>
+            <span v-else>📷 手勢</span>
+          </button>
+          <button @click="showLayoutEditor = true"
+            class="text-sm font-semibold rounded-xl py-2 bg-slate-600 hover:bg-slate-500 text-white transition-colors">
+            🎵 音階
           </button>
         </div>
       </div>

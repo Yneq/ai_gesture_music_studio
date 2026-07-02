@@ -252,7 +252,7 @@ function fireNote(note) {
 }
 
 function onCanvasMouseDown(e) {
-  if (status.value === 'running') return
+  if (status.value !== 'idle') return   // error/starting: don't fire notes
   isMouseDown = true
   const note = noteAtCanvasPos(e)
   fireNote(note)
@@ -260,7 +260,7 @@ function onCanvasMouseDown(e) {
 }
 
 function onCanvasMouseMove(e) {
-  if (status.value === 'running') return
+  if (status.value !== 'idle') return
   const note = noteAtCanvasPos(e)
   if (note !== hoverNote) { hoverNote = note; drawIdleRing(note) }
   if (isMouseDown) fireNote(note)
@@ -472,17 +472,27 @@ defineExpose({ start, stop, status })
       </template>
 
       <template v-else-if="status === 'error'">
-        <p class="text-red-400 text-xs text-center">⚠️ {{ errorMsg }}</p>
-        <div v-if="needsHttps"
-          class="bg-slate-800/90 rounded-lg p-3 text-[11px] text-slate-300 space-y-1.5 mx-3">
-          <p class="text-amber-400 font-semibold text-xs">Chrome 設定（一次）：</p>
-          <p class="break-all text-amber-300 select-all">chrome://flags/#unsafely-treat-insecure-origin-as-secure</p>
-          <p>加入 <span class="text-emerald-300 select-all">{{ siteOrigin }}</span> → Enable → 重啟</p>
+        <!-- pointer-events-auto so text can be selected / button can be clicked -->
+        <div class="pointer-events-auto flex flex-col items-center gap-2 w-full px-3">
+          <p class="text-red-400 text-xs text-center">⚠️ {{ errorMsg }}</p>
+          <div v-if="needsHttps"
+            class="bg-slate-900/95 border border-slate-600 rounded-xl p-3 text-[11px] text-slate-300 space-y-2 w-full">
+            <p class="text-amber-400 font-semibold">Chrome 設定（一次即可）：</p>
+            <p class="text-slate-400">① 複製下列網址，貼到 Chrome 網址列：</p>
+            <div class="bg-slate-800 rounded-lg px-2 py-1.5 cursor-text select-all user-select-all">
+              <span class="text-amber-300 break-all">chrome://flags/#unsafely-treat-insecure-origin-as-secure</span>
+            </div>
+            <p class="text-slate-400">② 在 Enabled Origins 貼入你的網址：</p>
+            <div class="bg-slate-800 rounded-lg px-2 py-1.5 cursor-text select-all">
+              <span class="text-emerald-300 break-all">{{ siteOrigin }}</span>
+            </div>
+            <p class="text-slate-400">③ 點 Relaunch 重啟 Chrome</p>
+          </div>
+          <button @click="start"
+            class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-4 py-1.5 rounded-lg transition-colors">
+            重試
+          </button>
         </div>
-        <button @click="start"
-          class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg transition-colors pointer-events-auto">
-          重試
-        </button>
       </template>
 
     </div>
