@@ -272,14 +272,16 @@ function detectLoop() {
         const ctx = canvasRef.value?.getContext('2d')
         const W = canvasRef.value?.width, H = canvasRef.value?.height
 
-        // ── 1. Pinch volume: thumb (4) ↔ index tip (8) distance ──────────────
-        const pdx = lm[4].x - lm[8].x, pdy = lm[4].y - lm[8].y
-        const pinchDist = Math.sqrt(pdx * pdx + pdy * pdy)
-        // 0.03 (fully closed) → 0 vol,  0.30 (wide open) → 1.0 vol
-        const targetVol = Math.min(1.0, Math.max(0, (pinchDist - 0.03) / 0.27))
-        smoothedVol = smoothedVol * (1 - VOL_ALPHA) + targetVol * VOL_ALPHA
-        dashboard.setGestureVolume(smoothedVol)
-        if (ctx && W && H) drawPinchFeedback(ctx, lm, W, H, smoothedVol)
+        // ── 1. Pinch volume: only active when Open_Palm ───────────────────────
+        if (gesture === 'Open_Palm') {
+          const pdx = lm[4].x - lm[8].x, pdy = lm[4].y - lm[8].y
+          const pinchDist = Math.sqrt(pdx * pdx + pdy * pdy)
+          // 0.03 (fully closed) → 0 vol,  0.30 (wide open) → 1.0 vol
+          const targetVol = Math.min(1.0, Math.max(0, (pinchDist - 0.03) / 0.27))
+          smoothedVol = smoothedVol * (1 - VOL_ALPHA) + targetVol * VOL_ALPHA
+          dashboard.setGestureVolume(smoothedVol)
+          if (ctx && W && H) drawPinchFeedback(ctx, lm, W, H, smoothedVol)
+        }
 
         // ── 2. Swipe (Closed_Fist) → cycle instrument ─────────────────────────
         if (gesture === 'Closed_Fist') {
