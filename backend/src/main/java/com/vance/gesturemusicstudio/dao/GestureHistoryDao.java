@@ -12,5 +12,9 @@ public interface GestureHistoryDao {
 
     Optional<GestureHistory> findFirstByUserIdOrderByCreatedAtDesc(Long userId);
 
+    long countByUserId(Long userId);
+
+    List<Object[]> findTopGesture(Long userId, Pageable pageable);
+
     GestureHistory save(GestureHistory gestureHistory);
 }

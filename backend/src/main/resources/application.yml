@@ -13,18 +13,13 @@ spring:
 
   jpa:
     hibernate:
-      # Step 1 開發階段先用 update 讓 Hibernate 自動建表。
-      # 之後若要更嚴謹(避免 update 意外改壞 schema),可以換成 Flyway/Liquibase migration。
       ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
+    show-sql: false
     open-in-view: false
 
 logging:
   level:
-    org.hibernate.SQL: debug
+    org.hibernate.SQL: warn
 
 app:
   jwt:
@@ -34,3 +29,5 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://10.10.2.66:5173}
   gesture:
     debounce-cooldown-ms: 500
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:1049407379801-9o5j7iubrj2lrubplme4ppnvbo334lo3.apps.googleusercontent.com}

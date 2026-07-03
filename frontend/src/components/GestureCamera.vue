@@ -1,9 +1,11 @@
 <script setup>
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { useDashboardStore } from '../stores/dashboardStore'
+import { useDashboardStore, DRUM_LABELS } from '../stores/dashboardStore'
+
+const DRUM_RING = { C4: 'Kick', D4: 'Snare', E4: 'HH', F4: 'Op.HH', G4: 'Tom↑', A4: 'Tom↓', B4: 'Crash', C5: 'Clap' }
 import apiClient from '../services/api'
 
-const emit = defineEmits(['status'])
+const emit = defineEmits(['status', 'gesture'])
 
 const dashboard = useDashboardStore()
 
@@ -29,6 +31,7 @@ let recognizer = null
 let mediaStream = null
 let rafId = null
 let lastNoteAt = 0
+const gestureEmitAt = {}   // { gestureName: timestamp } — debounce per gesture type
 
 // Swipe detection state
 let wristBuffer = []      // normalized canvas-X (mirrored), last N frames
@@ -78,7 +81,7 @@ function drawRing(ctx, W, H, highlightNote = null) {
   for (let i = 0; i < 8; i++) {
     const a1 = (i / 8) * 2 * Math.PI - Math.PI / 2
     const a2 = ((i + 1) / 8) * 2 * Math.PI - Math.PI / 2
-    const isHit = NOTES[i] === highlightNote
+    const isHit = dashboard.activeNotes[i] === highlightNote
     ctx.beginPath()
     ctx.arc(cx, cy, ro, a1, a2)
     ctx.arc(cx, cy, ri, a2, a1, true)
@@ -99,7 +102,8 @@ function drawRing(ctx, W, H, highlightNote = null) {
     ctx.stroke()
   }
   const labelR = (INNER + OUTER) / 2 * minDim
-  ctx.font = `bold ${Math.round(minDim * 0.055)}px monospace`
+  const isDrum = dashboard.selectedInstrument === 'drum'
+  ctx.font = `bold ${Math.round(minDim * (isDrum ? 0.044 : 0.055))}px monospace`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   dashboard.activeNotes.forEach((note, i) => {
@@ -107,7 +111,8 @@ function drawRing(ctx, W, H, highlightNote = null) {
     ctx.fillStyle = note === highlightNote ? '#34d399' : 'white'
     ctx.shadowColor = 'rgba(0,0,0,0.8)'
     ctx.shadowBlur = 4
-    ctx.fillText(note, cx + Math.cos(a) * labelR, cy + Math.sin(a) * labelR)
+    const label = isDrum ? (DRUM_RING[note] ?? note) : note
+    ctx.fillText(label, cx + Math.cos(a) * labelR, cy + Math.sin(a) * labelR)
   })
   ctx.shadowBlur = 0
 }
@@ -252,24 +257,29 @@ function fireNote(note) {
 }
 
 function onCanvasMouseDown(e) {
-  if (status.value !== 'idle') return   // error/starting: don't fire notes
+  if (status.value === 'starting') return
   isMouseDown = true
   const note = noteAtCanvasPos(e)
   fireNote(note)
-  if (note !== hoverNote) { hoverNote = note; drawIdleRing(note) }
+  // Only redraw idle ring when camera isn't rendering its own overlay
+  if (status.value !== 'running' && note !== hoverNote) { hoverNote = note; drawIdleRing(note) }
 }
 
 function onCanvasMouseMove(e) {
-  if (status.value !== 'idle') return
+  if (status.value === 'starting') return
   const note = noteAtCanvasPos(e)
-  if (note !== hoverNote) { hoverNote = note; drawIdleRing(note) }
+  // Dynamic cursor: pointer only over a note zone
+  if (canvasRef.value) canvasRef.value.style.cursor = note ? 'pointer' : 'default'
   if (isMouseDown) fireNote(note)
+  // Hover highlight only in idle/error (camera overlay handles its own drawing)
+  if (status.value !== 'running' && note !== hoverNote) { hoverNote = note; drawIdleRing(note) }
 }
 
 function onCanvasMouseUp() { isMouseDown = false }
 function onCanvasMouseLeave() {
   isMouseDown = false
-  if (hoverNote) { hoverNote = null; drawIdleRing(null) }
+  if (canvasRef.value) canvasRef.value.style.cursor = 'default'
+  if (status.value !== 'running' && hoverNote) { hoverNote = null; drawIdleRing(null) }
 }
 
 // ─── Gesture detection loop ───────────────────────────────────────────────────
@@ -280,12 +290,23 @@ function detectLoop() {
     if (status.value !== 'running') return
     if (video.readyState >= 2) {
       const now = Date.now()
-      const result = recognizer.recognizeForVideo(video, now)
+      let result
+      try { result = recognizer.recognizeForVideo(video, now) }
+      catch (frameErr) { console.warn('MediaPipe error:', frameErr); rafId = requestAnimationFrame(frame); return }
 
       if (result.gestures.length > 0 && result.landmarks.length > 0) {
         const top = result.gestures[0][0]
         const lm  = result.landmarks[0]
         const gesture = top.categoryName
+
+        // Emit gesture event (debounced per gesture type, 1.5s cooldown)
+        if (gesture !== 'None' && top.score >= 0.75) {
+          const last = gestureEmitAt[gesture] ?? 0
+          if (now - last > 1500) {
+            gestureEmitAt[gesture] = now
+            emit('gesture', { gesture, confidence: top.score })
+          }
+        }
 
         drawOverlay(lm)
         const ctx = canvasRef.value?.getContext('2d')
@@ -402,11 +423,14 @@ async function start() {
       errorMsg.value = '攝影機權限被拒，請允許後重試'
     } else if (e.name === 'NotFoundError') {
       errorMsg.value = '找不到攝影機裝置'
-    } else if (location.protocol !== 'https:') {
+    } else if (e.name === 'NotReadableError') {
+      errorMsg.value = '攝影機被其他程式佔用，請關閉後重試'
+    } else if (!navigator.mediaDevices && location.protocol !== 'https:') {
+      // mediaDevices undefined = actual HTTPS restriction (Chrome flag not set)
       errorMsg.value = '需要 HTTPS 才能存取攝影機'
       needsHttps.value = true
     } else {
-      errorMsg.value = '啟動失敗：' + (e.message || e.name)
+      errorMsg.value = `啟動失敗：${e.name}${e.message ? ' — ' + e.message : ''}`
     }
     cleanup()
   }
@@ -443,8 +467,7 @@ defineExpose({ start, stop, status })
 
     <!-- Canvas: always visible — gesture overlay when running, mouse ring when idle -->
     <canvas ref="canvasRef"
-      class="absolute inset-0 w-full h-full"
-      :class="status !== 'running' ? 'cursor-pointer' : ''"
+      class="absolute inset-0 w-full h-full cursor-default"
       @mousedown="onCanvasMouseDown"
       @mousemove="onCanvasMouseMove"
       @mouseup="onCanvasMouseUp"

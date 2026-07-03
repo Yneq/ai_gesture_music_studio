@@ -6,18 +6,24 @@ const WS_URL = import.meta.env.VITE_WS_BASE_URL || `${_proto}://${location.host}
 
 let stompClient = null
 
-export function connectWebSocket({ onNote, onConnect, onDisconnect }) {
+export function connectWebSocket({ onNote, onPresence, onConnect, onDisconnect }, username) {
   stompClient = new Client({
     brokerURL: WS_URL,
     reconnectDelay: 3000,
     onConnect: () => {
       stompClient.subscribe('/topic/notes', (message) => {
-        try {
-          onNote(JSON.parse(message.body))
-        } catch {
-          // ignore malformed messages
-        }
+        try { onNote(JSON.parse(message.body)) } catch { /* ignore */ }
       })
+      stompClient.subscribe('/topic/presence', (message) => {
+        try { onPresence?.(JSON.parse(message.body)) } catch { /* ignore */ }
+      })
+      // Announce this user has joined
+      if (username) {
+        stompClient.publish({
+          destination: '/app/presence/join',
+          body: JSON.stringify({ username }),
+        })
+      }
       onConnect?.()
     },
     onDisconnect: () => onDisconnect?.(),
@@ -25,6 +31,14 @@ export function connectWebSocket({ onNote, onConnect, onDisconnect }) {
   })
 
   stompClient.activate()
+}
+
+export function publishPresenceLeave(username) {
+  if (!username || !stompClient?.connected) return
+  stompClient.publish({
+    destination: '/app/presence/leave',
+    body: JSON.stringify({ username }),
+  })
 }
 
 export function disconnectWebSocket() {

@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
+record GoogleLoginBody(String credential) {}
+
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -43,6 +45,11 @@ public class AuthController {
     @GetMapping("/me")
     public UserResponse me(@AuthenticationPrincipal CustomUserDetails userDetails) {
         return UserResponse.from(userDetails.getUser());
+    }
+
+    @PostMapping("/google")
+    public AuthResponse googleLogin(@RequestBody GoogleLoginBody body) {
+        return authService.loginWithGoogle(body.credential());
     }
 
     @GetMapping("/check-username")

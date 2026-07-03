@@ -17,6 +17,13 @@ export const useAuthStore = defineStore('auth', {
       localStorage.setItem('token', data.token)
       localStorage.setItem('user', JSON.stringify(data.user))
     },
+    async loginWithGoogle(credential) {
+      const { data } = await apiClient.post('/auth/google', { credential })
+      this.token = data.token
+      this.user = data.user
+      localStorage.setItem('token', data.token)
+      localStorage.setItem('user', JSON.stringify(data.user))
+    },
     async register(username, password, email) {
       await apiClient.post('/auth/register', { username, password, email })
     },

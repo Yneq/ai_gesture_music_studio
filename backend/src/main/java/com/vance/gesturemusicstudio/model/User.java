@@ -35,6 +35,12 @@ public class User {
     @Column(unique = true, length = 100)
     private String email;
 
+    @Column(name = "google_id", unique = true)
+    private String googleId;
+
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

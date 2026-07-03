@@ -20,6 +20,16 @@ public class UserDaoImpl implements UserDao {
     }
 
     @Override
+    public Optional<User> findByGoogleId(String googleId) {
+        return userJpaRepository.findByGoogleId(googleId);
+    }
+
+    @Override
+    public Optional<User> findByEmail(String email) {
+        return userJpaRepository.findByEmail(email);
+    }
+
+    @Override
     public boolean existsByUsername(String username) {
         return userJpaRepository.existsByUsername(username);
     }
@@ -43,6 +53,10 @@ public class UserDaoImpl implements UserDao {
 interface UserJpaRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByUsername(String username);
+
+    Optional<User> findByGoogleId(String googleId);
+
+    Optional<User> findByEmail(String email);
 
     boolean existsByUsername(String username);
 

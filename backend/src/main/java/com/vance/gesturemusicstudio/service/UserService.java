@@ -10,4 +10,6 @@ public interface UserService {
     User getById(Long id);
 
     boolean existsByUsername(String username);
+
+    User findOrCreateGoogleUser(String googleId, String email, String name, String avatarUrl);
 }

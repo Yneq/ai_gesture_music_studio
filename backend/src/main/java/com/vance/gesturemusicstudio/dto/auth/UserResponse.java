@@ -13,6 +13,7 @@ public class UserResponse {
     private Long id;
     private String username;
     private String email;
+    private String avatarUrl;
     private LocalDateTime createdAt;
 
     public static UserResponse from(User user) {
@@ -20,6 +21,7 @@ public class UserResponse {
                 .id(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
+                .avatarUrl(user.getAvatarUrl())
                 .createdAt(user.getCreatedAt())
                 .build();
     }

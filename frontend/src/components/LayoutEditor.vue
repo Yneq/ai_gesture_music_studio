@@ -1,6 +1,6 @@
 <script setup>
-import { ref } from 'vue'
-import { useDashboardStore } from '../stores/dashboardStore'
+import { ref, computed } from 'vue'
+import { useDashboardStore, DRUM_LABELS } from '../stores/dashboardStore'
 
 defineProps({ modelValue: Boolean })
 const emit = defineEmits(['update:modelValue'])
@@ -68,6 +68,12 @@ async function del(id) {
   await dashboard.deleteLayout(id)
 }
 
+const isDrum = computed(() => dashboard.selectedInstrument === 'drum')
+
+// Drum pad icons shown in the ring slots and palette
+const DRUM_ICONS = { C4: '🥁', D4: '🪘', E4: '🎩', F4: '👒', G4: '🔺', A4: '🔻', B4: '💫', C5: '👏' }
+const DRUM_PALETTE = Object.entries(DRUM_LABELS).map(([note, name]) => ({ note, name, icon: DRUM_ICONS[note] ?? '🥁' }))
+
 // Whether a note has a sharp (to style it differently)
 function isSharp(note) { return note.includes('#') }
 </script>
@@ -104,14 +110,18 @@ function isSharp(note) { return note.includes('#') }
                 :class="draggingOverSlot === i
                   ? 'bg-emerald-500 text-white scale-105'
                   : 'bg-slate-700 text-slate-100 hover:bg-slate-600'">
-                {{ note }}
+                <template v-if="isDrum">
+                  <div class="text-base leading-none">{{ DRUM_ICONS[note] ?? '🥁' }}</div>
+                  <div class="text-[10px] font-semibold mt-0.5">{{ DRUM_LABELS[note] ?? note }}</div>
+                </template>
+                <template v-else>{{ note }}</template>
                 <div class="text-slate-500 text-[10px] font-normal mt-0.5">{{ i + 1 }}</div>
               </div>
             </div>
           </section>
 
           <!-- ── Palette ───────────────────────────────────────────────────── -->
-          <section>
+          <section v-if="!isDrum">
             <p class="text-xs text-slate-400 mb-2 uppercase tracking-wider">音符庫（拖到上方格子替換）</p>
             <div class="flex flex-wrap gap-1.5">
               <div v-for="note in PALETTE" :key="note"
@@ -123,6 +133,21 @@ function isSharp(note) { return note.includes('#') }
                   ? 'bg-slate-600 text-slate-300 hover:bg-slate-500'
                   : 'bg-slate-700 text-slate-100 hover:bg-slate-600'">
                 {{ note }}
+              </div>
+            </div>
+          </section>
+
+          <!-- ── Drum palette ──────────────────────────────────────────────── -->
+          <section v-else>
+            <p class="text-xs text-slate-400 mb-2 uppercase tracking-wider">打擊板（拖到上方格子替換）</p>
+            <div class="flex flex-wrap gap-2">
+              <div v-for="pad in DRUM_PALETTE" :key="pad.note"
+                draggable="true"
+                @dragstart="onDragStartPalette(pad.note, $event)"
+                @dragend="onDragEnd"
+                class="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl text-xs font-semibold cursor-grab select-none transition-colors bg-slate-700 hover:bg-slate-600">
+                <span class="text-xl leading-none">{{ pad.icon }}</span>
+                <span class="text-slate-100">{{ pad.name }}</span>
               </div>
             </div>
           </section>
@@ -148,7 +173,9 @@ function isSharp(note) { return note.includes('#') }
                 class="flex items-center gap-3 bg-slate-700/60 rounded-xl px-4 py-2.5">
                 <div class="flex-1 min-w-0">
                   <p class="text-slate-100 text-sm font-semibold truncate">{{ layout.name }}</p>
-                  <p class="text-slate-500 text-xs truncate">{{ layout.notes.join(' · ') }}</p>
+                  <p class="text-slate-500 text-xs truncate">
+                    {{ isDrum ? layout.notes.map(n => DRUM_LABELS[n] ?? n).join(' · ') : layout.notes.join(' · ') }}
+                  </p>
                 </div>
                 <button @click="dashboard.setActiveNotes([...layout.notes])"
                   class="text-xs px-3 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg transition-colors shrink-0">

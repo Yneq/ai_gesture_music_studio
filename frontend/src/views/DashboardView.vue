@@ -1,10 +1,13 @@
 <script setup>
-import { onMounted, onUnmounted, nextTick, ref } from 'vue'
+import { onMounted, onUnmounted, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 import { useDashboardStore, DRUM_LABELS } from '../stores/dashboardStore'
+import { publishPresenceLeave } from '../services/websocketService'
+import apiClient from '../services/api'
 import GestureCamera from '../components/GestureCamera.vue'
 import LayoutEditor from '../components/LayoutEditor.vue'
+import StatsModal from '../components/StatsModal.vue'
 
 const auth = useAuthStore()
 const dashboard = useDashboardStore()
@@ -13,10 +16,32 @@ const router = useRouter()
 const cameraRef = ref(null)
 const cameraStatus = ref('idle')
 const showLayoutEditor = ref(false)
+const showStats = ref(false)
+
+// ── Note particles (visualization) ───────────────────────────────────────────
+const noteParticles = ref([])
+let _particleId = 0
+let _particleTimer = null
+
+watch(() => dashboard.recentNotes[0], (note) => {
+  if (!note || note.type === 'presence' || note.type === 'presence-leave') return
+  const id = _particleId++
+  noteParticles.value.push({
+    id,
+    text: note.note,
+    color: note.color,
+    x: 8 + Math.random() * 84,   // % across main area
+    y: 30 + Math.random() * 45,  // % down main area
+  })
+  if (noteParticles.value.length > 12) noteParticles.value.shift()
+  setTimeout(() => {
+    noteParticles.value = noteParticles.value.filter(p => p.id !== id)
+  }, 2200)
+})
 
 // ── Resizable left panel ──────────────────────────────────────────────────────
 const mainRef = ref(null)
-const leftPct = ref(48)   // default: left ≈ 48 %, center+right share the rest
+const leftPct = ref(48)
 
 let dragStart = null
 
@@ -43,21 +68,31 @@ function onDragEnd() {
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
 }
-// ─────────────────────────────────────────────────────────────────────────────
+
+function sendLeave() { publishPresenceLeave(auth.user?.username) }
 
 onMounted(async () => {
-  dashboard.connect()
+  window.addEventListener('beforeunload', sendLeave)
+  dashboard.connect(auth.user?.username)
   dashboard.fetchRecentGestures()
   dashboard.fetchLayouts()
   await nextTick()
   cameraRef.value?.start()
+  dashboard.enableAudio().catch(() => {})
+  toggleJazzBg().catch(() => {})  // auto-play on enter; silently ignored if browser blocks
 })
 onUnmounted(() => {
+  window.removeEventListener('beforeunload', sendLeave)
+  sendLeave()
   dashboard.disconnect()
+  stopJazzBg()
+  stopCaravan()
+  clearTimeout(_toastTimer)
   onDragEnd()
 })
 
 function logout() {
+  sendLeave()                // send before WebSocket disconnects
   dashboard.disconnect()
   cameraRef.value?.stop()
   auth.logout()
@@ -69,54 +104,238 @@ function autoEnableAudio() {
 }
 
 const INSTRUMENTS = [
-  { id: 'piano',  label: 'Piano',  icon: '🎹' },
+  { id: 'piano',  label: 'Piano',   icon: '🎹' },
   { id: 'guitar', label: 'Acoustic', icon: '🎸' },
-  { id: 'synth',  label: 'Synth',  icon: '🎛️' },
-  { id: 'drum',   label: 'Drum',   icon: '🥁' },
+  { id: 'synth',  label: 'Synth',   icon: '🎛️' },
+  { id: 'drum',   label: 'Drum',    icon: '🥁' },
 ]
 
 const GESTURE_EMOJI = {
   OPEN_HAND: '🖐', FIST: '✊', THUMB_UP: '👍',
   PEACE: '✌️', POINT: '👆',
+  // MediaPipe names (from frontend camera)
+  Open_Palm: '🖐', Closed_Fist: '✊', Thumb_Up: '👍',
+  Victory: '✌️', Pointing_Up: '👆', ILoveYou: '🤟',
 }
+
+// Map MediaPipe gesture names → canonical names for display
+const GESTURE_LABEL = {
+  Open_Palm: 'OPEN_HAND', Closed_Fist: 'FIST', Thumb_Up: 'THUMB_UP',
+  Victory: 'PEACE', Pointing_Up: 'POINT', ILoveYou: 'ILoveYou',
+}
+
+// ── Gesture toast HUD ────────────────────────────────────────────────────────
+const gestureToast = ref(null)   // { emoji, label, confidence } | null
+let _toastTimer = null
+
+function onGestureDetected({ gesture, confidence }) {
+  const label = GESTURE_LABEL[gesture] ?? gesture
+  dashboard.recentGestures.unshift({ id: Date.now(), gesture: label, confidence })
+  if (dashboard.recentGestures.length > 20) dashboard.recentGestures.pop()
+
+  // Persist to DB (fire-and-forget; don't block UI)
+  apiClient.post('/gesture', { gesture: label, confidence }).catch(() => {})
+
+  // Show HUD overlay on camera
+  clearTimeout(_toastTimer)
+  gestureToast.value = { emoji: GESTURE_EMOJI[gesture] ?? '🤚', label, confidence }
+  _toastTimer = setTimeout(() => { gestureToast.value = null }, 2200)
+}
+
+// ── Jazz background music ─────────────────────────────────────────────────────
+let _jazzAudio = null
+const jazzPlaying = ref(false)
+
+function stopJazzBg() {
+  if (_jazzAudio) { _jazzAudio.pause(); _jazzAudio.currentTime = 0 }
+  jazzPlaying.value = false
+}
+
+async function toggleJazzBg() {
+  if (jazzPlaying.value) { stopJazzBg(); return }
+  if (!_jazzAudio) {
+    _jazzAudio = new Audio('/audio/jazz_rock.mp3')
+    _jazzAudio.loop = true
+    _jazzAudio.volume = 0.04
+    _jazzAudio.onended = () => { jazzPlaying.value = false }
+  }
+  try {
+    await _jazzAudio.play()
+    jazzPlaying.value = true
+  } catch (e) { jazzPlaying.value = false }
+}
+
+// ── Caravan player (local, avoids Pinia HMR stale-instance issues) ────────────
+let _caravanAudio = null
+let _caravanCtx   = null
+let _caravanGain  = null
+const caravanPlaying = ref(false)
+
+async function playCaravan() {
+  stopJazzBg()
+  stopCaravan()
+  try {
+    if (!_caravanAudio) {
+      _caravanAudio = new Audio('/audio/caravan.mp3')
+      _caravanCtx   = new AudioContext()
+      const src     = _caravanCtx.createMediaElementSource(_caravanAudio)
+      _caravanGain  = _caravanCtx.createGain()
+      _caravanGain.gain.value = 1.0
+      src.connect(_caravanGain)
+      _caravanGain.connect(_caravanCtx.destination)
+    }
+    _caravanAudio.currentTime = 30
+    _caravanAudio.loop = true
+    _caravanAudio.onended = () => { caravanPlaying.value = false }
+    if (_caravanCtx.state === 'suspended') await _caravanCtx.resume()
+    await _caravanAudio.play()
+    caravanPlaying.value = true
+  } catch (e) {
+    console.error('Caravan play error:', e)
+    caravanPlaying.value = false
+  }
+}
+
+function stopCaravan() {
+  if (_caravanAudio) {
+    _caravanAudio.pause()
+    _caravanAudio.currentTime = 119
+    _caravanAudio.onended = null
+  }
+  caravanPlaying.value = false
+}
+
+// shared inline style helpers
+const GLASS = 'background:rgba(10,4,0,0.68);backdrop-filter:blur(20px);border:1px solid rgba(212,175,55,0.25);'
+const GOLD_TEXT = 'color:#FFF5D6;'
+const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing:0.22em;text-transform:uppercase;font-weight:600;'
 </script>
 
 <template>
-  <div class="h-screen bg-slate-900 text-slate-100 flex flex-col overflow-hidden"
-    @click.capture="autoEnableAudio">
+  <div class="h-screen flex flex-col overflow-hidden relative" @click.capture="autoEnableAudio">
 
-    <!-- Header -->
-    <header class="bg-slate-800 border-b border-slate-700 px-6 py-3 flex items-center justify-between shrink-0">
-      <h1 class="text-lg font-bold tracking-wide">AI Gesture Music Studio</h1>
+    <!-- ── Background: same baroque orchestra as login ──────────────────────── -->
+    <div class="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none"
+      style="background-image:url('https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?auto=format&fit=crop&w=1920&q=80')">
+    </div>
+    <div class="absolute inset-0 pointer-events-none"
+      style="background:linear-gradient(to bottom,rgba(14,6,0,0.82) 0%,rgba(22,10,0,0.72) 50%,rgba(14,6,0,0.88) 100%)">
+    </div>
+    <div class="absolute inset-0 pointer-events-none"
+      style="background:radial-gradient(ellipse 90% 80% at 50% 40%,transparent 0%,rgba(5,2,0,0.55) 100%)">
+    </div>
+
+    <!-- ── Header ───────────────────────────────────────────────────────────── -->
+    <header class="relative z-10 shrink-0 px-6 py-3 flex items-center justify-between"
+      style="background:rgba(8,3,0,0.80);border-bottom:1px solid rgba(212,175,55,0.22);backdrop-filter:blur(16px);">
+
+      <div class="flex items-center gap-3">
+        <span style="color:rgba(212,175,55,0.6);font-size:13px">❖</span>
+        <h1 style="font-family:'Georgia',serif;font-size:1.05rem;font-weight:700;letter-spacing:0.12em;color:#FFF5D6;text-shadow:0 0 20px rgba(212,175,55,0.3)">
+          MAESTRO
+        </h1>
+        <span style="color:rgba(212,175,55,0.3);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;padding-top:1px">
+          AI Gesture Music Studio
+        </span>
+      </div>
+
       <div class="flex items-center gap-4">
+        <!-- Connection status -->
         <span class="flex items-center gap-2 text-sm">
-          <span class="w-2.5 h-2.5 rounded-full"
-            :class="dashboard.wsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'"></span>
-          <span :class="dashboard.wsConnected ? 'text-emerald-400' : 'text-slate-400'">
+          <span class="w-2 h-2 rounded-full transition-colors"
+            :class="dashboard.wsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-stone-600'"></span>
+          <span class="text-xs" :style="dashboard.wsConnected ? 'color:#6ee7b7' : 'color:rgba(212,175,55,0.3)'">
             {{ dashboard.wsConnected ? 'Live' : '未連線' }}
           </span>
         </span>
-        <span class="text-slate-400 text-sm">{{ auth.user?.username }}</span>
-        <button @click="logout" class="text-sm text-slate-400 hover:text-white transition-colors">登出</button>
+
+        <!-- Jazz background music toggle -->
+        <button @click="toggleJazzBg" class="music-hdr-btn flex items-center justify-center w-7 h-7 rounded-full"
+          :title="jazzPlaying ? '關閉背景音樂' : '播放背景音樂'"
+          style="border:1px solid rgba(212,175,55,0.3);background:rgba(12,5,0,0.5);backdrop-filter:blur(6px)">
+          <span v-if="jazzPlaying" class="absolute w-7 h-7 rounded-full animate-ping opacity-20"
+            style="background:rgba(212,175,55,0.5)"></span>
+          <span class="relative text-xs" style="color:rgba(212,175,55,0.85)">{{ jazzPlaying ? '🎶' : '🎵' }}</span>
+        </button>
+
+        <!-- Online users (Figma-style stacked avatars) -->
+        <div v-if="dashboard.onlineUsers.length" class="flex items-center">
+          <div v-for="(user, i) in dashboard.onlineUsers.slice(0, 5)" :key="user"
+            class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 relative"
+            :style="`border:1.5px solid rgba(8,3,0,0.9);margin-left:${i===0?'0':'-6px'};z-index:${10-i};
+              background:rgba(212,175,55,0.18);color:#D4AF37;`"
+            :title="user">
+            {{ user.charAt(0).toUpperCase() }}
+            <!-- green dot for self -->
+            <span v-if="user === auth.user?.username"
+              class="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full bg-emerald-400"
+              style="border:1px solid rgba(8,3,0,0.9)"></span>
+          </div>
+          <span v-if="dashboard.onlineUsers.length > 5"
+            class="ml-1 text-[10px]" style="color:rgba(212,175,55,0.45)">
+            +{{ dashboard.onlineUsers.length - 5 }}
+          </span>
+          <span class="ml-2 text-[10px]" style="color:rgba(212,175,55,0.35)">
+            {{ dashboard.onlineUsers.length }} 人在線
+          </span>
+        </div>
+
+        <!-- Self avatar + username (click → stats) -->
+        <button class="avatar-btn flex items-center gap-2"
+          @click="showStats = true" title="我的統計">
+          <div class="avatar-ring w-7 h-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center"
+            style="border:1px solid rgba(212,175,55,0.45)">
+            <img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl"
+              class="w-full h-full object-cover" referrerpolicy="no-referrer">
+            <span v-else class="text-xs font-bold w-full h-full flex items-center justify-center"
+              style="background:rgba(212,175,55,0.15);color:#D4AF37;letter-spacing:0">
+              {{ auth.user?.username?.charAt(0)?.toUpperCase() }}
+            </span>
+          </div>
+          <span style="color:rgba(212,175,55,0.65);font-size:0.8rem">{{ auth.user?.username }}</span>
+        </button>
+        <button @click="logout"
+          class="text-xs transition-colors px-3 py-1 rounded-lg"
+          style="color:rgba(212,175,55,0.45);border:1px solid rgba(212,175,55,0.18);"
+          @mouseenter="e=>{e.target.style.color='rgba(212,175,55,0.9)';e.target.style.borderColor='rgba(212,175,55,0.5)'}"
+          @mouseleave="e=>{e.target.style.color='rgba(212,175,55,0.45)';e.target.style.borderColor='rgba(212,175,55,0.18)'}">
+          登出
+        </button>
       </div>
     </header>
 
-    <!-- Main: flex row with draggable divider between left and center+right -->
-    <main ref="mainRef" class="flex-1 min-h-0 flex gap-0 p-4">
+    <!-- ── Main ─────────────────────────────────────────────────────────────── -->
+    <main ref="mainRef" class="relative z-10 flex-1 min-h-0 flex gap-0 p-3 overflow-hidden">
 
-      <!-- ── Left panel (resizable) ─────────────────────────────────────── -->
+      <!-- Note particles overlay -->
+      <TransitionGroup tag="div"
+        class="absolute inset-0 pointer-events-none z-30 overflow-hidden"
+        name="note-particle">
+        <div v-for="p in noteParticles" :key="p.id"
+          class="absolute font-black select-none note-particle-el"
+          :class="p.color"
+          :style="`left:${p.x}%;top:${p.y}%;font-size:clamp(1.1rem,2.5vw,2rem)`">
+          {{ p.text }}
+        </div>
+      </TransitionGroup>
+
+      <!-- Left panel -->
       <div :style="{ width: leftPct + '%' }"
-        class="shrink-0 min-h-0 bg-slate-800 rounded-2xl p-4 flex flex-col gap-3 overflow-hidden">
+        class="shrink-0 min-h-0 rounded-2xl p-4 flex flex-col gap-3 overflow-hidden"
+        style="background:rgba(10,4,0,0.68);backdrop-filter:blur(20px);border:1px solid rgba(212,175,55,0.22);">
 
         <!-- Current note badge -->
         <div class="flex items-center justify-between shrink-0">
-          <h2 class="text-slate-400 text-xs uppercase tracking-widest font-semibold">即時音符</h2>
+          <span :style="LABEL_STYLE">即時音符</span>
           <div class="flex items-center gap-2">
             <span class="font-black text-lg transition-all duration-200"
-              :class="dashboard.currentNote ? dashboard.noteColor : 'text-slate-700'">
-              {{ dashboard.selectedInstrument === 'drum' && dashboard.currentNote
-                  ? (DRUM_LABELS[dashboard.currentNote] ?? dashboard.currentNote)
-                  : (dashboard.currentNote ?? '—') }}
+              :class="dashboard.currentNote ? dashboard.noteColor : ''">
+              <span v-if="!dashboard.currentNote" style="color:rgba(212,175,55,0.2)">—</span>
+              <template v-else>
+                {{ dashboard.selectedInstrument === 'drum'
+                    ? (DRUM_LABELS[dashboard.currentNote] ?? dashboard.currentNote)
+                    : dashboard.currentNote }}
+              </template>
             </span>
             <span v-if="dashboard.currentUsername" class="text-xs" :class="dashboard.noteColor">
               {{ dashboard.currentUsername }}
@@ -124,119 +343,234 @@ const GESTURE_EMOJI = {
           </div>
         </div>
 
-        <!-- Camera: 4:3 fixed ratio so circle never distorts -->
-        <div class="w-full aspect-[4/3] relative shrink-0">
-          <GestureCamera ref="cameraRef" class="absolute inset-0" @status="v => cameraStatus = v" />
+        <!-- Camera -->
+        <div class="w-full aspect-[4/3] relative shrink-0 rounded-xl overflow-hidden"
+          style="border:1px solid rgba(212,175,55,0.18)">
+          <GestureCamera ref="cameraRef" class="absolute inset-0"
+            @status="v => cameraStatus = v"
+            @gesture="onGestureDetected" />
+
+          <!-- Gesture HUD toast -->
+          <Transition name="gesture-toast">
+            <div v-if="gestureToast"
+              class="absolute bottom-0 left-0 right-0 flex items-center gap-3 px-4 py-3 pointer-events-none"
+              style="background:linear-gradient(to top,rgba(6,2,0,0.88) 0%,rgba(6,2,0,0.4) 70%,transparent 100%)">
+              <span class="text-4xl leading-none select-none">{{ gestureToast.emoji }}</span>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-bold tracking-[0.18em] uppercase"
+                  style="color:#FFF5D6;text-shadow:0 0 12px rgba(212,175,55,0.6)">
+                  {{ gestureToast.label }}
+                </div>
+              </div>
+            </div>
+          </Transition>
         </div>
 
-        <div class="flex-1 min-h-0"></div>
-
-        <!-- Instrument Selector -->
+        <!-- Instrument selector -->
         <div class="grid grid-cols-4 gap-2 shrink-0">
-          <button
-            v-for="inst in INSTRUMENTS" :key="inst.id"
+          <button v-for="inst in INSTRUMENTS" :key="inst.id"
             @click="dashboard.setInstrument(inst.id)"
-            class="flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-semibold transition-colors"
-            :class="dashboard.selectedInstrument === inst.id
-              ? 'bg-emerald-600 text-white'
-              : 'bg-slate-700 text-slate-400 hover:bg-slate-600'">
+            class="gold-btn flex flex-col items-center gap-1 rounded-xl py-2 text-xs font-semibold transition-all"
+            :style="dashboard.selectedInstrument === inst.id
+              ? 'background:linear-gradient(135deg,#7A5C0E,#D4AF37,#7A5C0E);color:#1A0800;box-shadow:0 2px 12px rgba(212,175,55,0.3)'
+              : 'background:rgba(255,240,200,0.06);border:1px solid rgba(212,175,55,0.18);color:rgba(212,175,55,0.55)'">
             <span class="text-lg">{{ inst.icon }}</span>{{ inst.label }}
           </button>
         </div>
 
-        <!-- Canon · Gesture · Layout (one row, no height increase) -->
-        <div class="grid grid-cols-3 gap-2 shrink-0">
-          <button
-            @click="dashboard.canonPlaying ? dashboard.stopCanon() : dashboard.playCanon()"
-            class="text-sm font-semibold rounded-xl py-2 transition-colors"
-            :class="dashboard.canonPlaying
-              ? 'bg-rose-600 hover:bg-rose-500 text-white'
-              : 'bg-amber-600 hover:bg-amber-500 text-white'">
-            {{ dashboard.canonPlaying ? '⏹ 卡農' : '🎼 卡農' }}
+        <!-- 4 actions in one row -->
+        <div class="grid grid-cols-4 gap-1.5 shrink-0">
+          <button @click="dashboard.canonPlaying ? dashboard.stopCanon() : (stopJazzBg(), dashboard.playCanon())"
+            class="gold-btn text-[11px] font-bold rounded-xl py-2 transition-all leading-tight"
+            :style="dashboard.canonPlaying
+              ? 'background:rgba(185,60,60,0.75);border:1px solid rgba(255,100,100,0.3);color:#FFF5D6'
+              : 'background:linear-gradient(135deg,#7A5C0E,#C8981A,#7A5C0E);color:#1A0800;box-shadow:0 2px 8px rgba(212,175,55,0.2)'">
+            {{ dashboard.canonPlaying ? '⏹' : '🎼' }}<br>卡農
           </button>
-          <button
-            @click="cameraStatus === 'running' ? cameraRef.stop() : cameraRef.start()"
+
+          <button @click="caravanPlaying ? stopCaravan() : playCaravan()"
+            class="gold-btn text-[11px] font-bold rounded-xl py-2 transition-all leading-tight"
+            :style="caravanPlaying
+              ? 'background:rgba(185,60,60,0.75);border:1px solid rgba(255,100,100,0.3);color:#FFF5D6'
+              : 'background:linear-gradient(135deg,#7A5C0E,#C8981A,#7A5C0E);color:#1A0800;box-shadow:0 2px 8px rgba(212,175,55,0.2)'">
+            {{ caravanPlaying ? '⏹' : '🎷' }}<br>Caravan
+          </button>
+
+          <button @click="cameraStatus === 'running' ? cameraRef.stop() : cameraRef.start()"
             :disabled="cameraStatus === 'starting'"
-            class="text-sm font-semibold rounded-xl py-2 transition-colors disabled:opacity-50"
-            :class="cameraStatus === 'running'
-              ? 'bg-rose-700 hover:bg-rose-600 text-white'
-              : 'bg-slate-600 hover:bg-slate-500 text-white'">
-            <span v-if="cameraStatus === 'starting'">載入中…</span>
-            <span v-else-if="cameraStatus === 'running'" class="flex items-center justify-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-rose-400 animate-pulse"></span>停止
-            </span>
-            <span v-else>📷 手勢</span>
+            class="gold-btn text-[11px] font-bold rounded-xl py-2 transition-all disabled:opacity-50 leading-tight"
+            :style="cameraStatus === 'running'
+              ? 'background:rgba(185,60,60,0.75);border:1px solid rgba(255,100,100,0.3);color:#FFF5D6'
+              : 'background:rgba(255,240,200,0.07);border:1px solid rgba(212,175,55,0.22);color:rgba(212,175,55,0.7)'">
+            <template v-if="cameraStatus === 'starting'">⏳<br>載入中</template>
+            <template v-else-if="cameraStatus === 'running'">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse mb-0.5"></span><br>停止
+            </template>
+            <template v-else>📷<br>手勢</template>
           </button>
+
           <button @click="showLayoutEditor = true"
-            class="text-sm font-semibold rounded-xl py-2 bg-slate-600 hover:bg-slate-500 text-white transition-colors">
-            🎵 音階
+            class="gold-btn text-[11px] font-bold rounded-xl py-2 transition-all leading-tight"
+            style="background:rgba(255,240,200,0.07);border:1px solid rgba(212,175,55,0.22);color:rgba(212,175,55,0.7);">
+            🎵<br>音階
           </button>
         </div>
       </div>
 
-      <!-- ── Drag handle ─────────────────────────────────────────────────── -->
-      <div class="w-3 shrink-0 flex items-center justify-center cursor-col-resize group"
-        @mousedown="onDragStart">
-        <div class="w-0.5 h-12 rounded-full bg-slate-700 group-hover:bg-emerald-500 transition-colors"></div>
+      <!-- Drag handle -->
+      <div class="w-3 shrink-0 flex items-center justify-center cursor-col-resize group" @mousedown="onDragStart">
+        <div class="w-px h-10 rounded-full transition-colors"
+          style="background:rgba(212,175,55,0.2)"
+          @mouseenter="e=>e.target.style.background='rgba(212,175,55,0.7)'"
+          @mouseleave="e=>e.target.style.background='rgba(212,175,55,0.2)'"></div>
       </div>
 
-      <!-- ── Center + Right share remaining width ─────────────────────────── -->
-      <div class="flex-1 min-h-0 min-w-0 flex gap-4">
+      <!-- Center + Right -->
+      <div class="flex-1 min-h-0 min-w-0 flex gap-3">
 
-        <!-- Center: Note Feed -->
-        <div class="flex-1 min-h-0 min-w-0 bg-slate-800 rounded-2xl p-5 flex flex-col gap-3">
+        <!-- Note feed -->
+        <div class="flex-1 min-h-0 min-w-0 rounded-2xl p-4 flex flex-col gap-3"
+          style="background:rgba(10,4,0,0.68);backdrop-filter:blur(20px);border:1px solid rgba(212,175,55,0.22);">
           <div class="flex items-center justify-between shrink-0">
-            <h2 class="text-slate-400 text-xs uppercase tracking-widest font-semibold">即時音符串流</h2>
-            <span class="text-slate-600 text-xs">最近 20 筆</span>
+            <span :style="LABEL_STYLE">即時音符串流</span>
+            <span style="color:rgba(212,175,55,0.25);font-size:0.7rem">最近 20 筆</span>
           </div>
-          <div class="flex-1 min-h-0 overflow-y-auto flex flex-col-reverse gap-1.5 pr-1">
+          <div class="flex-1 min-h-0 overflow-y-auto flex flex-col-reverse gap-1.5 pr-1 maestro-scroll">
             <div v-for="event in dashboard.recentNotes" :key="event.id"
-              class="flex items-center gap-2 bg-slate-700/60 rounded-lg px-3 py-2 text-sm shrink-0">
-              <span class="w-2 h-2 rounded-full shrink-0"
-                :class="event.color.replace('text-', 'bg-')"></span>
-              <span class="font-bold w-8" :class="event.color">{{ event.note }}</span>
-              <span class="text-slate-300 text-xs flex-1 truncate">{{ event.username }}</span>
-              <span class="text-slate-500 text-xs">{{ event.instrument }}</span>
-              <span class="text-slate-600 text-xs">{{ event.time }}</span>
+              class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm shrink-0"
+              :style="event.type === 'presence'
+                ? 'background:rgba(212,175,55,0.07);border:1px solid rgba(212,175,55,0.2)'
+                : 'background:rgba(255,240,200,0.05);border:1px solid rgba(212,175,55,0.1)'">
+
+              <!-- Presence / join-leave event -->
+              <template v-if="event.type === 'presence' || event.type === 'presence-leave'">
+                <span style="font-size:10px" :style="event.type==='presence' ? 'color:rgba(212,175,55,0.6)' : 'color:rgba(180,60,60,0.6)'">
+                  {{ event.type === 'presence' ? '✦' : '✧' }}
+                </span>
+                <span class="text-xs font-semibold" :class="event.color">{{ event.username }}</span>
+                <span class="text-xs" style="color:rgba(212,175,55,0.45)">
+                  {{ event.type === 'presence' ? '加入演奏廳' : '離開演奏廳' }}
+                </span>
+                <span class="text-xs ml-auto" style="color:rgba(212,175,55,0.25)">{{ event.time }}</span>
+              </template>
+
+              <!-- Regular note event -->
+              <template v-else>
+                <span class="w-2 h-2 rounded-full shrink-0" :class="event.color.replace('text-', 'bg-')"></span>
+                <span class="font-bold w-8 text-xs" :class="event.color">{{ event.note }}</span>
+                <span class="text-xs flex-1 truncate" style="color:rgba(255,240,200,0.65)">{{ event.username }}</span>
+                <span class="text-xs" style="color:rgba(212,175,55,0.35)">{{ event.instrument }}</span>
+                <span class="text-xs" style="color:rgba(212,175,55,0.22)">{{ event.time }}</span>
+              </template>
             </div>
             <p v-if="!dashboard.recentNotes.length"
-              class="text-slate-600 text-sm text-center py-8 shrink-0">
+              class="text-center py-8 shrink-0 text-sm"
+              style="color:rgba(212,175,55,0.2)">
               用食指 POINT 手勢進入音區即可觸發
             </p>
           </div>
         </div>
 
-        <!-- Right: Gesture History -->
-        <div class="flex-1 min-h-0 min-w-0 bg-slate-800 rounded-2xl p-5 flex flex-col gap-3">
+        <!-- Gesture history -->
+        <div class="flex-1 min-h-0 min-w-0 rounded-2xl p-4 flex flex-col gap-3"
+          style="background:rgba(10,4,0,0.68);backdrop-filter:blur(20px);border:1px solid rgba(212,175,55,0.22);">
           <div class="flex items-center justify-between shrink-0">
-            <h2 class="text-slate-400 text-xs uppercase tracking-widest font-semibold">指令手勢紀錄</h2>
+            <span :style="LABEL_STYLE">指令手勢紀錄</span>
             <button @click="dashboard.fetchRecentGestures()"
-              class="text-slate-500 hover:text-white text-xs transition-colors">重新整理</button>
+              class="text-xs transition-colors"
+              style="color:rgba(212,175,55,0.35);"
+              @mouseenter="e=>e.target.style.color='rgba(212,175,55,0.8)'"
+              @mouseleave="e=>e.target.style.color='rgba(212,175,55,0.35)'">
+              重新整理
+            </button>
           </div>
-          <div class="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1">
+          <div class="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 maestro-scroll">
             <div v-for="g in dashboard.recentGestures" :key="g.id"
-              class="flex items-center gap-3 bg-slate-700/60 rounded-lg px-3 py-2 text-sm">
+              class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm"
+              style="background:rgba(255,240,200,0.05);border:1px solid rgba(212,175,55,0.1)">
               <span class="text-xl">{{ GESTURE_EMOJI[g.gesture] ?? '🤚' }}</span>
               <div class="flex-1 min-w-0">
-                <div class="text-slate-200 font-medium truncate">{{ g.gesture }}</div>
-                <div class="text-slate-500 text-xs">信心 {{ (g.confidence * 100).toFixed(0) }}%</div>
+                <div class="text-xs font-semibold truncate" style="color:#FFF5D6">{{ g.gesture }}</div>
+                <div class="text-xs" style="color:rgba(212,175,55,0.35)">信心 {{ (g.confidence * 100).toFixed(0) }}%</div>
               </div>
             </div>
             <p v-if="!dashboard.recentGestures.length"
-              class="text-slate-600 text-sm text-center py-8">尚無紀錄</p>
+              class="text-center py-8 text-sm" style="color:rgba(212,175,55,0.2)">尚無紀錄</p>
           </div>
-          <div class="border-t border-slate-700 pt-3 space-y-1 text-xs text-slate-500 shrink-0">
-            <div>✊ FIST + 左右揮 → 換樂器</div>
-            <div>👍 THUMB_UP ・ ✌️ PEACE ・ 🖐 OPEN_HAND → 指令</div>
-            <div>👆 POINT + 音區 → 音符 ・ 🖐 OPEN + 轉腕 → 音量</div>
+
+          <!-- Legend -->
+          <div class="shrink-0 space-y-1 pt-3"
+            style="border-top:1px solid rgba(212,175,55,0.15);">
+            <div class="text-xs" style="color:rgba(212,175,55,0.35)">✊ FIST + 左右揮 → 換樂器</div>
+            <div class="text-xs" style="color:rgba(212,175,55,0.35)">👍 THUMB ・ ✌️ PEACE ・ 🖐 OPEN → 指令</div>
+            <div class="text-xs" style="color:rgba(212,175,55,0.35)">👆 POINT + 音區 → 音符 ・ 🖐 OPEN + 轉腕 → 音量</div>
           </div>
         </div>
 
-      </div><!-- end center+right -->
-
+      </div>
     </main>
 
   </div>
 
   <LayoutEditor v-model="showLayoutEditor" />
+  <StatsModal v-model="showStats"
+    :username="auth.user?.username"
+    :avatar-url="auth.user?.avatarUrl" />
 </template>
+
+<style scoped>
+.maestro-scroll::-webkit-scrollbar { width: 4px; }
+.maestro-scroll::-webkit-scrollbar-track { background: transparent; }
+.maestro-scroll::-webkit-scrollbar-thumb { background: rgba(212,175,55,0.25); border-radius: 4px; }
+.maestro-scroll::-webkit-scrollbar-thumb:hover { background: rgba(212,175,55,0.5); }
+
+/* Gesture HUD toast transition */
+.gesture-toast-enter-active { transition: opacity 0.18s ease, transform 0.18s ease; }
+.gesture-toast-leave-active { transition: opacity 0.55s ease, transform 0.55s ease; }
+.gesture-toast-enter-from  { opacity: 0; transform: translateY(10px); }
+.gesture-toast-leave-to    { opacity: 0; transform: translateY(6px); }
+
+/* Gold hover effect for all dashboard action/instrument buttons */
+.gold-btn {
+  cursor: pointer;
+  transition: box-shadow 0.15s, filter 0.15s, border-color 0.15s !important;
+}
+.gold-btn:not(:disabled):hover {
+  filter: brightness(1.25) saturate(1.1);
+  box-shadow: 0 0 0 1px rgba(212,175,55,0.65), 0 0 16px rgba(212,175,55,0.28) !important;
+}
+.gold-btn:not(:disabled):active {
+  filter: brightness(1.05);
+  transform: scale(0.97);
+}
+
+/* Header music button */
+.music-hdr-btn {
+  cursor: pointer; position: relative;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.music-hdr-btn:hover {
+  transform: scale(1.15);
+  border-color: rgba(212,175,55,0.75) !important;
+  box-shadow: 0 0 12px rgba(212,175,55,0.3);
+}
+
+/* Avatar button hover */
+.avatar-btn { cursor: pointer; }
+.avatar-btn .avatar-ring {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.avatar-btn:hover .avatar-ring {
+  transform: scale(1.18);
+  box-shadow: 0 0 0 2px rgba(212,175,55,0.7), 0 0 12px rgba(212,175,55,0.4);
+}
+
+/* Note particle visualization */
+.note-particle-enter-active { animation: float-up 2.2s ease-out forwards; }
+.note-particle-leave-active  { display: none; }
+@keyframes float-up {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  60%  { opacity: 0.7; }
+  100% { opacity: 0; transform: translateY(-90px) scale(0.55); }
+}
+</style>

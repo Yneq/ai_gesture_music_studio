@@ -216,11 +216,14 @@ function playNoteForInstrument(note, instrument) {
   }
 }
 
-// ─── Canon audio state (independent from instrument routing above) ────────────
-// HTML5 Audio + Web Audio GainNode allows volume > 1.0.
+// ─── Canon / Caravan audio state ─────────────────────────────────────────────
 let canonAudio = null
 let canonAudioCtx = null
 let canonGainNode = null
+
+let caravanAudio = null
+let caravanAudioCtx = null
+let caravanGainNode = null
 
 // ─── Vite HMR cleanup ────────────────────────────────────────────────────────
 if (import.meta.hot) {
@@ -235,6 +238,9 @@ if (import.meta.hot) {
     if (canonAudio) { canonAudio.pause(); canonAudio = null }
     if (canonAudioCtx) { try { canonAudioCtx.close() } catch { /* ignore */ } ; canonAudioCtx = null }
     canonGainNode = null
+    if (caravanAudio) { caravanAudio.pause(); caravanAudio = null }
+    if (caravanAudioCtx) { try { caravanAudioCtx.close() } catch { /* ignore */ } ; caravanAudioCtx = null }
+    caravanGainNode = null
   })
 }
 
@@ -250,9 +256,11 @@ export const useDashboardStore = defineStore('dashboard', {
     recentNotes: [],
     recentGestures: [],
     canonPlaying: false,
+    caravanPlaying: false,
     gestureVolume: 1.0,
     activeNotes: ['C4','D4','E4','F4','G4','A4','B4','C5'],
-    savedLayouts: [],   // [{ id, name, notes[] }]
+    savedLayouts: [],
+    onlineUsers: [],    // string[] of usernames currently in the studio
   }),
 
   getters: {
@@ -260,17 +268,19 @@ export const useDashboardStore = defineStore('dashboard', {
   },
 
   actions: {
-    connect() {
+    connect(username) {
       connectWebSocket({
         onNote: (event) => this._handleNoteEvent(event),
+        onPresence: (event) => this._handlePresenceEvent(event),
         onConnect: () => { this.wsConnected = true },
         onDisconnect: () => { this.wsConnected = false },
-      })
+      }, username)
     },
 
     disconnect() {
       disconnectWebSocket()
       this.wsConnected = false
+      this.onlineUsers = []
     },
 
     async enableAudio() {
@@ -361,11 +371,60 @@ export const useDashboardStore = defineStore('dashboard', {
       this.canonPlaying = false
     },
 
+    async playCaravan() {
+      this.stopCaravan()
+      try {
+        if (!caravanAudio) {
+          caravanAudio = new Audio('/audio/caravan.mp3')
+          caravanAudioCtx = new AudioContext()
+          const source = caravanAudioCtx.createMediaElementSource(caravanAudio)
+          caravanGainNode = caravanAudioCtx.createGain()
+          caravanGainNode.gain.value = 1.0
+          source.connect(caravanGainNode)
+          caravanGainNode.connect(caravanAudioCtx.destination)
+        }
+        caravanAudio.currentTime = 119
+        caravanAudio.loop = true
+        caravanAudio.onended = () => { this.caravanPlaying = false }
+        if (caravanAudioCtx.state === 'suspended') await caravanAudioCtx.resume()
+        await caravanAudio.play()
+        this.caravanPlaying = true
+      } catch (e) {
+        console.error('Caravan play error:', e)
+        this.caravanPlaying = false
+      }
+    },
+
+    stopCaravan() {
+      if (caravanAudio) {
+        caravanAudio.pause()
+        caravanAudio.currentTime = 119
+        caravanAudio.onended = null
+      }
+      this.caravanPlaying = false
+    },
+
     async fetchRecentGestures() {
       try {
         const { data } = await apiClient.get('/gestures/recent?limit=10')
         this.recentGestures = data
       } catch { /* ignore */ }
+    },
+
+    _handlePresenceEvent(event) {
+      const { type, username } = event
+      // Always sync the full authoritative list from the server
+      if (Array.isArray(event.onlineUsers)) {
+        this.onlineUsers = [...event.onlineUsers]
+      }
+      this.recentNotes.unshift({
+        id: Date.now(),
+        type: type === 'join' ? 'presence' : 'presence-leave',
+        username,
+        time: new Date(event.timestamp ?? Date.now()).toLocaleTimeString(),
+        color: userColor(username),
+      })
+      if (this.recentNotes.length > 20) this.recentNotes.pop()
     },
 
     _handleNoteEvent(event) {
