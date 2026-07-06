@@ -23,7 +23,7 @@ watch(status, v => emit('status', v))
 // NOTES comes from the store so the ring updates when user edits the layout
 const INNER = 0.12
 const OUTER = 0.38
-const DEBOUNCE_MS = 500
+const REPEAT_MS = 800   // same zone re-trigger cooldown
 
 const INST_LABELS = { piano: '🎹 Piano', guitar: '🎸 Acoustic', synth: '🎛️ Synth', drum: '🥁 Drum' }
 
@@ -31,6 +31,7 @@ let recognizer = null
 let mediaStream = null
 let rafId = null
 let lastNoteAt = 0
+let lastNote = null
 const gestureEmitAt = {}   // { gestureName: timestamp } — debounce per gesture type
 
 // Swipe detection state
@@ -247,13 +248,14 @@ let hoverNote = null
 
 function fireNote(note) {
   const now = Date.now()
-  if (!note || now - lastNoteAt < DEBOUNCE_MS) return
+  if (!note || (note === lastNote && now - lastNoteAt < REPEAT_MS)) return
+  lastNote = note
   lastNoteAt = now
   detectedNote.value = note
   setTimeout(() => { detectedNote.value = null }, 600)
   apiClient.post('/music-events', {
-    note, instrument: dashboard.selectedInstrument, volume: 80,
-  }).catch(() => {})
+    note, instrument: dashboard.selectedInstrument, volume: Math.round(smoothedVol * 100),
+  }).catch(e => console.warn('music-event POST failed', e))
 }
 
 function onCanvasMouseDown(e) {
@@ -363,15 +365,16 @@ function detectLoop() {
         }
 
         // ── 3. Note detection (Pointing_Up) ───────────────────────────────────
-        if (gesture === 'Pointing_Up' && top.score >= 0.7 && now - lastNoteAt > DEBOUNCE_MS) {
+        if (gesture === 'Pointing_Up' && top.score >= 0.7) {
           const note = noteAtPosition(lm[8].x, lm[8].y)
-          if (note) {
+          if (note && (note !== lastNote || now - lastNoteAt > REPEAT_MS)) {
+            lastNote = note
             lastNoteAt = now
             detectedNote.value = note
             setTimeout(() => { detectedNote.value = null }, 600)
             apiClient.post('/music-events', {
-              note, instrument: dashboard.selectedInstrument, volume: 80,
-            }).catch(() => {})
+              note, instrument: dashboard.selectedInstrument, volume: Math.round(smoothedVol * 100),
+            }).catch(e => console.warn('music-event POST failed', e))
           }
         }
       } else {
@@ -451,6 +454,8 @@ function stop() {
 
 onMounted(() => nextTick(() => drawIdleRing()))
 watch(status, v => { if (v !== 'running') nextTick(() => drawIdleRing()) })
+watch(() => dashboard.selectedInstrument, () => { if (status.value !== 'running') nextTick(() => drawIdleRing()) })
+watch(() => dashboard.activeNotes, () => { if (status.value !== 'running') nextTick(() => drawIdleRing()) }, { deep: true })
 onUnmounted(stop)
 defineExpose({ start, stop, status })
 </script>

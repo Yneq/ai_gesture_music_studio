@@ -30,6 +30,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserService userService;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final RestTemplate restTemplate;
 
     @Value("${app.google.client-id:}")
     private String googleClientId;
@@ -66,9 +67,8 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @SuppressWarnings("unchecked")
     public AuthResponse loginWithGoogle(String credential) {
-        RestTemplate rest = new RestTemplate();
         try {
-            ResponseEntity<Map> resp = rest.getForEntity(
+            ResponseEntity<Map> resp = restTemplate.getForEntity(
                     "https://oauth2.googleapis.com/tokeninfo?id_token=" + credential,
                     Map.class
             );

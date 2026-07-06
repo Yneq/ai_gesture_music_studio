@@ -2,7 +2,7 @@
 
 用 webcam 手勢辨識即時演奏音樂的全端互動樂器專案。
 
-架構：Python（MediaPipe 手勢辨識）→ Spring Boot（商業邏輯、JWT、WebSocket、PostgreSQL）→ Vue 3 Dashboard（Web Audio API 即時發聲）。
+架構：瀏覽器端 MediaPipe WASM（手勢辨識，在使用者電腦執行）→ Spring Boot（商業邏輯、JWT、WebSocket、PostgreSQL）→ Vue 3 Dashboard（Web Audio API 即時發聲）。
 
 ---
 
@@ -85,8 +85,9 @@ ai-gesture-music-studio/
 │       ├── dto/                    # Request / Response DTO
 │       ├── service/                # Service interface + impl
 │       ├── controller/             # REST + WebSocket controller
-│       ├── security/               # JWT filter、SecurityConfig
-│       └── util/                   # JwtService、CustomUserDetails
+│       ├── config/                 # CorsConfig、WebSocketConfig
+│       ├── exception/              # ApiException、GlobalExceptionHandler
+│       └── util/                   # SecurityConfig、JwtService、JwtAuthenticationFilter、CustomUserDetails
 ├── frontend/                       # Vue 3 + Vite + Tailwind v4 + Pinia
 │   └── src/
 │       ├── views/                  # LoginView、DashboardView
@@ -132,6 +133,25 @@ cd gesture_ai
 pip install -r requirements.txt
 python main.py
 ```
+
+---
+
+## 架構演進
+
+原始設計有一個獨立的 Python 服務（`gesture_ai/`）負責手勢辨識，前端把攝影機影像傳給它處理。
+
+實作後評估三個問題：
+1. **延遲**：影像上傳 → 辨識 → 回傳，網路來回導致明顯延遲
+2. **部署複雜度**：多一個需要 GPU/CPU 的 Python 服務要維運
+3. **隱私**：攝影機原始影像傳出瀏覽器
+
+最終改為使用 MediaPipe 官方 JavaScript SDK（`@mediapipe/tasks-vision`），以 WebAssembly 在**使用者瀏覽器本機**執行推論，影像完全不離開裝置。`gesture_ai/` 保留為早期方案存檔。
+
+---
+
+## Known Limitations
+
+- **WebSocket 未驗證**：`/ws` endpoint 目前 `permitAll`，任何人不需登入即可連上 STOMP、訂閱 `/topic/notes`。REST API 有 JWT 保護，但 WebSocket 尚未實作 `ChannelInterceptor` token 驗證。
 
 ---
 

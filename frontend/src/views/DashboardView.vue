@@ -36,7 +36,7 @@ watch(() => dashboard.recentNotes[0], (note) => {
   if (noteParticles.value.length > 12) noteParticles.value.shift()
   setTimeout(() => {
     noteParticles.value = noteParticles.value.filter(p => p.id !== id)
-  }, 2200)
+  }, 2000)
 })
 
 // ── Resizable left panel ──────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ function onGestureDetected({ gesture, confidence }) {
   if (dashboard.recentGestures.length > 20) dashboard.recentGestures.pop()
 
   // Persist to DB (fire-and-forget; don't block UI)
-  apiClient.post('/gesture', { gesture: label, confidence }).catch(() => {})
+  apiClient.post('/gesture', { gesture: label, confidence }).catch(e => console.warn('gesture POST failed', e))
 
   // Show HUD overlay on camera
   clearTimeout(_toastTimer)
@@ -312,9 +312,9 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
         class="absolute inset-0 pointer-events-none z-30 overflow-hidden"
         name="note-particle">
         <div v-for="p in noteParticles" :key="p.id"
-          class="absolute font-black select-none note-particle-el"
+          class="absolute font-black select-none manga-note"
           :class="p.color"
-          :style="`left:${p.x}%;top:${p.y}%;font-size:clamp(1.1rem,2.5vw,2rem)`">
+          :style="`left:${p.x}%;top:${p.y}%`">
           {{ p.text }}
         </div>
       </TransitionGroup>
@@ -499,11 +499,12 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
           </div>
 
           <!-- Legend -->
-          <div class="shrink-0 space-y-1 pt-3"
-            style="border-top:1px solid rgba(212,175,55,0.15);">
-            <div class="text-xs" style="color:rgba(212,175,55,0.35)">✊ FIST + 左右揮 → 換樂器</div>
-            <div class="text-xs" style="color:rgba(212,175,55,0.35)">👍 THUMB ・ ✌️ PEACE ・ 🖐 OPEN → 指令</div>
-            <div class="text-xs" style="color:rgba(212,175,55,0.35)">👆 POINT + 音區 → 音符 ・ 🖐 OPEN + 轉腕 → 音量</div>
+          <div class="shrink-0 space-y-1.5 pt-3"
+            style="border-top:1px solid rgba(212,175,55,0.2);">
+            <div class="text-sm font-medium" style="color:rgba(212,175,55,0.7)">👆 POINT + 音區 → 音符</div>
+            <div class="text-sm font-medium" style="color:rgba(212,175,55,0.7)">✊ FIST + 左右揮 → 換樂器</div>
+            <div class="text-sm font-medium" style="color:rgba(212,175,55,0.7)">🖐 OPEN + 轉腕 → 音量</div>
+            <div class="text-sm font-medium" style="color:rgba(212,175,55,0.7)">👍 THUMB ・ ✌️ PEACE ・ 🖐 OPEN → 指令</div>
           </div>
         </div>
 
@@ -565,12 +566,36 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
   box-shadow: 0 0 0 2px rgba(212,175,55,0.7), 0 0 12px rgba(212,175,55,0.4);
 }
 
-/* Note particle visualization */
-.note-particle-enter-active { animation: float-up 2.2s ease-out forwards; }
-.note-particle-leave-active  { display: none; }
-@keyframes float-up {
-  0%   { opacity: 1; transform: translateY(0) scale(1); }
-  60%  { opacity: 0.7; }
-  100% { opacity: 0; transform: translateY(-90px) scale(0.55); }
+/* Note particle — manga style */
+.manga-note {
+  font-size: clamp(2rem, 4.5vw, 3.5rem);
+  font-style: italic;
+  font-family: 'Georgia', 'Times New Roman', serif;
+  -webkit-text-stroke: 2.5px rgba(0,0,0,0.95);
+  text-shadow:
+    3px  3px 0 rgba(0,0,0,0.85),
+   -2px -2px 0 rgba(0,0,0,0.85),
+    2px -2px 0 rgba(0,0,0,0.85),
+   -2px  2px 0 rgba(0,0,0,0.85);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+/* Manga palette — purple tones */
+.manga-gold   { color: #23C4B9; }
+.manga-amber  { color: #23C4B9; }
+.manga-cream  { color: #23C4B9; }
+.manga-warm   { color: #23C4B9; }
+.manga-bright { color: #23C4B9; }
+.manga-pale   { color: #23C4B9; }
+
+.note-particle-enter-active { animation: manga-pop 2.0s ease-out forwards; }
+.note-particle-leave-active { display: none; }
+@keyframes manga-pop {
+  0%   { opacity: 0;   transform: scale(1.7) rotate(-10deg); }
+  8%   { opacity: 1;   transform: scale(1.08) rotate(-4deg); }
+  15%  {               transform: scale(0.97) rotate(-3deg); }
+  78%  { opacity: 1;   transform: scale(0.97) rotate(-3deg); }
+  100% { opacity: 0;   transform: scale(0.88) rotate(-3deg); }
 }
 </style>

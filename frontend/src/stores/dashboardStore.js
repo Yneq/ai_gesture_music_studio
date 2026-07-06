@@ -3,8 +3,8 @@ import apiClient from '../services/api'
 import { connectWebSocket, disconnectWebSocket } from '../services/websocketService'
 
 const PALETTE = [
-  'text-emerald-400', 'text-blue-400', 'text-purple-400',
-  'text-orange-400', 'text-pink-400', 'text-yellow-400',
+  'manga-gold', 'manga-amber', 'manga-cream',
+  'manga-warm', 'manga-bright', 'manga-pale',
 ]
 const _colorCache = {}
 function userColor(username) {
