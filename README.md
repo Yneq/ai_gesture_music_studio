@@ -1,10 +1,10 @@
 # MAESTRO — AI Gesture Music Studio
 
-[English](./README-en.md) | 繁體中文
+[繁體中文](./README-tw.md) | English
 
-用 webcam 手勢辨識即時演奏音樂的全端互動樂器專案。
+A full-stack interactive instrument that lets you play music in real time using webcam hand gestures.
 
-瀏覽器端 MediaPipe WASM（手勢辨識，在使用者裝置執行）→ Spring Boot REST + WebSocket → Vue 3 Dashboard（Web Audio API 即時發聲）
+Browser-side MediaPipe WASM (gesture recognition, runs on the user's device) → Spring Boot REST + WebSocket → Vue 3 Dashboard (Web Audio API playback)
 
 ---
 
@@ -19,20 +19,20 @@
 
 ---
 
-## 功能
+## Features
 
-- **手勢辨識**：MediaPipe Hands 辨識 8 種手勢（POINTING、OPEN_PALM、CLOSED_FIST、THUMB_UP、VICTORY…），在瀏覽器本機以 WebAssembly 執行，影像不離開裝置
-- **圓形音階 UI**：食指滑過不同扇形區域即時觸發音符，支援 Piano / Acoustic Guitar / Synth / Drum 四種音色
-- **手勢指令**：FIST 左右揮切換樂器；OPEN_PALM 轉腕調音量（palm rotation delta knob）；THUMB_UP / VICTORY / OPEN_PALM 觸發離散指令
-- **自訂音階環**：拖拉介面自由排列 8 個音符格子，可儲存 / 載入多組排列
-- **Google OAuth + JWT**：支援 Google 一鍵登入與帳密註冊
-- **個人統計**：今日音符、累計音符、最常樂器、最常音符、最常手勢
-- **即時在線**：STOMP WebSocket 顯示目前在線玩家
-- **背景音樂**：Dashboard 自動播放 jazz 背景音，可一鍵切換
+- **Gesture Recognition**: MediaPipe Hands detects 8 gestures (POINTING, OPEN_PALM, CLOSED_FIST, THUMB_UP, VICTORY…) running entirely in the browser via WebAssembly — the camera feed never leaves the device
+- **Circular Note Ring UI**: Point your index finger into different ring sectors to trigger notes. Supports Piano, Acoustic Guitar, Synth, and Drum
+- **Gesture Commands**: FIST + swipe left/right to cycle instruments; OPEN_PALM + wrist rotation to control volume (palm rotation delta knob); THUMB_UP / VICTORY trigger discrete commands
+- **Custom Note Layout**: Drag-and-drop editor to arrange 8 note slots freely, with save/load for multiple layouts
+- **Google OAuth + JWT**: Google one-click login and username/password registration
+- **Personal Stats**: Today's notes, total notes, top instrument, top note, top gesture
+- **Live Presence**: STOMP WebSocket shows who's currently online
+- **Background Music**: Jazz background audio auto-plays on dashboard entry, toggleable
 
 ---
 
-## 截圖
+## Screenshots
 
 <p align="center">
   <img src="./docs/images/screenshot-stats.png" width="340">
@@ -40,23 +40,23 @@
 
 ---
 
-## 技術棧
+## Tech Stack
 
-| 分類 | 技術 |
+| Category | Technology |
 |---|---|
-| 後端框架 | Spring Boot 3.3.4 + Java 17 |
-| 資料庫 | PostgreSQL（Spring Data JPA / Hibernate） |
-| 即時通訊 | WebSocket（STOMP over SockJS） |
-| 身份驗證 | JWT（jjwt）+ Google OAuth 2.0（GSI） |
-| 密碼加密 | BCrypt（Spring Security） |
-| 前端框架 | Vue 3 + Vite + Pinia |
+| Backend Framework | Spring Boot 3.3.4 + Java 17 |
+| Database | PostgreSQL (Spring Data JPA / Hibernate) |
+| Real-time Communication | WebSocket (STOMP over SockJS) |
+| Authentication | JWT (jjwt) + Google OAuth 2.0 (GSI) |
+| Password Hashing | BCrypt (Spring Security) |
+| Frontend Framework | Vue 3 + Vite + Pinia |
 | CSS | Tailwind CSS v4 |
-| 手勢辨識 | MediaPipe Tasks Vision（JS + WebAssembly） |
-| 音訊引擎 | Web Audio API |
+| Gesture Recognition | MediaPipe Tasks Vision (JS + WebAssembly) |
+| Audio Engine | Web Audio API |
 
 ---
 
-## 資料庫 ER 圖
+## Database Schema
 
 <p align="center">
   <img src="./docs/images/er-diagram.png" width="600">
@@ -64,46 +64,46 @@
 
 ---
 
-## 專案結構
+## Project Structure
 
 ```
 ai-gesture-music-studio/
 ├── backend/                        # Spring Boot 3.3 + Java 17
 │   └── src/main/java/.../
-│       ├── model/                  # JPA Entity（4 張表）
-│       ├── dao/                    # DAO interface + JPA impl
-│       ├── dto/                    # Request / Response DTO
-│       ├── service/                # Service interface + impl
-│       ├── controller/             # REST + WebSocket controller
-│       ├── config/                 # CorsConfig、WebSocketConfig
-│       ├── exception/              # ApiException、GlobalExceptionHandler
-│       └── util/                   # SecurityConfig、JwtService、JwtAuthenticationFilter、CustomUserDetails
+│       ├── model/                  # JPA Entities (4 tables)
+│       ├── dao/                    # DAO interfaces + JPA impls
+│       ├── dto/                    # Request / Response DTOs
+│       ├── service/                # Service interfaces + impls
+│       ├── controller/             # REST + WebSocket controllers
+│       ├── config/                 # CorsConfig, WebSocketConfig
+│       ├── exception/              # ApiException, GlobalExceptionHandler
+│       └── util/                   # SecurityConfig, JwtService, JwtAuthenticationFilter, CustomUserDetails
 ├── frontend/                       # Vue 3 + Vite + Tailwind v4 + Pinia
 │   └── src/
-│       ├── views/                  # LoginView、DashboardView
-│       ├── components/             # GestureCamera、LayoutEditor、StatsModal
-│       └── stores/                 # authStore、dashboardStore
-└── gesture_ai/                     # Python 早期方案存檔（見架構演進）
+│       ├── views/                  # LoginView, DashboardView
+│       ├── components/             # GestureCamera, LayoutEditor, StatsModal
+│       └── stores/                 # authStore, dashboardStore
+└── gesture_ai/                     # Python early prototype (see Architecture Evolution)
 ```
 
 ---
 
-## 啟動方式
+## Setup
 
 ### Backend
 
-需求：Java 17+、Maven、PostgreSQL
+Requirements: Java 17+, Maven, PostgreSQL
 
 ```bash
-# 1. 建立資料庫
+# 1. Create database
 createdb gesture_music_studio
 
-# 2. 設定環境變數
+# 2. Set environment variables
 export DB_USERNAME=postgres
-export DB_PASSWORD=你的密碼
+export DB_PASSWORD=your_password
 export JWT_SECRET=your-secret-min-32-chars
 
-# 3. 啟動（Hibernate 自動建表）
+# 3. Run (Hibernate auto-creates tables on first start)
 cd backend
 mvn spring-boot:run
 ```
@@ -114,84 +114,84 @@ mvn spring-boot:run
 cd frontend
 npm install
 npm run dev
-# 開 http://localhost:5173
+# Open http://localhost:5173
 ```
 
 ---
 
-## API 文件
+## API Reference
 
-### 驗證 `/api/auth`
+### Auth `/api/auth`
 
-| Method | Path | 說明 |
+| Method | Path | Description |
 |---|---|---|
-| POST | `/api/auth/register` | 帳密註冊 |
-| POST | `/api/auth/login` | 登入，回傳 JWT |
-| POST | `/api/auth/google` | Google OAuth 登入 |
-| GET  | `/api/auth/me` | 取得當前使用者資訊（需 token） |
+| POST | `/api/auth/register` | Register with username + password |
+| POST | `/api/auth/login` | Login, returns JWT |
+| POST | `/api/auth/google` | Google OAuth login |
+| GET  | `/api/auth/me` | Get current user info (requires token) |
 
-### 演奏事件 `/api/music-events`（需 `Authorization: Bearer <token>`）
+### Music Events `/api/music-events` (requires `Authorization: Bearer <token>`)
 
-| Method | Path | 說明 |
+| Method | Path | Description |
 |---|---|---|
-| POST | `/api/music-events` | 新增音符事件（note、instrument、volume） |
-| GET  | `/api/music-events/recent` | 取最近 20 筆事件 |
+| POST | `/api/music-events` | Record a note event (note, instrument, volume) |
+| GET  | `/api/music-events/recent` | Get last 20 events |
 
-### 手勢紀錄 `/api/gesture`（需 token）
+### Gesture History `/api/gesture` (requires token)
 
-| Method | Path | 說明 |
+| Method | Path | Description |
 |---|---|---|
-| POST | `/api/gesture` | 新增手勢紀錄 |
-| GET  | `/api/gesture/recent` | 取最近 20 筆 |
+| POST | `/api/gesture` | Record a gesture command |
+| GET  | `/api/gesture/recent` | Get last 20 gestures |
 
-### 音階排列 `/api/layout`（需 token）
+### Note Layouts `/api/layout` (requires token)
 
-| Method | Path | 說明 |
+| Method | Path | Description |
 |---|---|---|
-| GET    | `/api/layout` | 取得所有已儲存排列 |
-| POST   | `/api/layout` | 儲存新排列 |
-| DELETE | `/api/layout/{id}` | 刪除排列 |
+| GET    | `/api/layout` | Get all saved layouts |
+| POST   | `/api/layout` | Save a new layout |
+| DELETE | `/api/layout/{id}` | Delete a layout |
 
-### 統計 `/api/stats`（需 token）
+### Stats `/api/stats` (requires token)
 
-| Method | Path | 說明 |
+| Method | Path | Description |
 |---|---|---|
-| GET | `/api/stats/me` | 取得個人統計資料 |
+| GET | `/api/stats/me` | Get personal statistics |
 
 ### WebSocket
 
 ```
 Endpoint: /ws
-Subscribe: /topic/notes     # 即時音符串流
-Subscribe: /topic/presence  # 在線人數變化
+Subscribe: /topic/notes     # Live note stream
+Subscribe: /topic/presence  # Online presence updates
 Publish:   /app/presence/join
 Publish:   /app/presence/leave
 ```
 
 ---
 
-## 架構演進
+## Architecture Evolution
 
-原始設計有一個獨立的 Python 服務（`gesture_ai/`）負責手勢辨識，前端把攝影機影像傳給它處理。
+The original design included a standalone Python service (`gesture_ai/`) for gesture recognition — the frontend would stream camera frames to it for processing.
 
-實作後評估三個問題：
-1. **延遲**：影像上傳 → 辨識 → 回傳，網路來回導致明顯延遲
-2. **部署複雜度**：多一個需要 GPU/CPU 的 Python 服務要維運
-3. **隱私**：攝影機原始影像傳出瀏覽器
+After evaluation, three problems emerged:
+1. **Latency**: Frame upload → inference → response introduced noticeable round-trip delay
+2. **Deployment complexity**: An extra GPU/CPU-hungry Python service to maintain
+3. **Privacy**: Raw camera frames leaving the browser
 
-最終改為 MediaPipe 官方 JavaScript SDK（`@mediapipe/tasks-vision`），以 WebAssembly 在**使用者瀏覽器本機**執行推論，影像完全不離開裝置。`gesture_ai/` 保留為早期方案存檔。
+The final solution uses the official MediaPipe JavaScript SDK (`@mediapipe/tasks-vision`), running inference via **WebAssembly directly in the user's browser**. Camera footage never leaves the device. The `gesture_ai/` folder is kept as an archived early prototype.
 
 ---
 
 ## Known Limitations
 
-- **WebSocket 未驗證**：`/ws` endpoint 目前 `permitAll`，任何人不需登入即可連上 STOMP。REST API 有 JWT 保護，WebSocket 的 `ChannelInterceptor` token 驗證尚未實作。
+- **WebSocket unauthenticated**: The `/ws` endpoint is currently `permitAll` — anyone can connect to STOMP and subscribe to `/topic/notes` without logging in. REST API is protected by JWT, but `ChannelInterceptor` token validation for WebSocket is not yet implemented.
 
 ---
 
-## 技術筆記
+## Technical Notes
 
-- **雙管線 debounce**：離散指令手勢走時間型 debounce（1.5s 冷卻）；演奏型音符走區域變化型 debounce（滑入新區立刻觸發，同區停留 800ms 才重觸發）
-- **Google OAuth FedCM**：使用 `renderButton` + 透明 overlay 解決 FedCM 在 HTTP 環境被封鎖的問題；私有 LAN IP 改用 `isLocalhost` 判斷隱藏按鈕
-- **JWT**：密鑰走 `${JWT_SECRET}` 環境變數注入，不寫死在設定檔
-- **音量控制**：手腕旋轉角度（palm rotation delta）累積控制，非 pinch，避免誤觸
+- **Dual-pipeline debounce**: Discrete command gestures use time-based debounce (1.5s cooldown); note-playing gestures use zone-change debounce (fires immediately on entering a new zone, re-triggers after 800ms in the same zone)
+- **Google OAuth FedCM**: Uses `renderButton` + transparent overlay to work around FedCM being blocked on HTTP; private LAN IPs use `isLocalhost` check to hide the Google button
+- **JWT**: Secret injected via `${JWT_SECRET}` environment variable, never hardcoded
+- **Volume control**: Wrist rotation angle (palm rotation delta accumulation) — not pinch — to avoid accidental triggers

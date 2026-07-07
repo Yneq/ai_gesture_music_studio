@@ -36,7 +36,7 @@ watch(() => dashboard.recentNotes[0], (note) => {
   if (noteParticles.value.length > 12) noteParticles.value.shift()
   setTimeout(() => {
     noteParticles.value = noteParticles.value.filter(p => p.id !== id)
-  }, 2000)
+  }, 1000)
 })
 
 // ── Resizable left panel ──────────────────────────────────────────────────────
@@ -589,13 +589,13 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
 .manga-bright { color: #23C4B9; }
 .manga-pale   { color: #23C4B9; }
 
-.note-particle-enter-active { animation: manga-pop 2.0s ease-out forwards; }
+.note-particle-enter-active { animation: manga-pop 1.0s ease-out forwards; }
 .note-particle-leave-active { display: none; }
 @keyframes manga-pop {
-  0%   { opacity: 0;   transform: scale(1.7) rotate(-10deg); }
-  8%   { opacity: 1;   transform: scale(1.08) rotate(-4deg); }
-  15%  {               transform: scale(0.97) rotate(-3deg); }
-  78%  { opacity: 1;   transform: scale(0.97) rotate(-3deg); }
-  100% { opacity: 0;   transform: scale(0.88) rotate(-3deg); }
+  0%   { opacity: 0;    transform: scale(1.7) rotate(-10deg); }
+  8%   { opacity: 0.5;  transform: scale(1.08) rotate(-4deg); }
+  15%  {                transform: scale(0.97) rotate(-3deg); }
+  78%  { opacity: 0.5;  transform: scale(0.97) rotate(-3deg); }
+  100% { opacity: 0;    transform: scale(0.88) rotate(-3deg); }
 }
 </style>
