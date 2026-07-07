@@ -9,9 +9,9 @@ Browser-side MediaPipe WASM (gesture recognition, runs on the user's device) →
 ---
 
 <p align="center">
-  <img src="./docs/images/screenshot-login.png" width="320">
-  <img src="./docs/images/screenshot-dashboard.png" width="320">
-  <img src="./docs/images/screenshot-stats.png" width="220">
+  <img src="./docs/images/screenshot-login.png" width="370">
+  <img src="./docs/images/screenshot-dashboard.png" width="370">
+  <img src="./docs/images/screenshot-stats.png" width="155">
 </p>
 
 <p align="center">
