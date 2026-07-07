@@ -268,13 +268,13 @@ export const useDashboardStore = defineStore('dashboard', {
   },
 
   actions: {
-    connect(username) {
+    connect(username, token) {
       connectWebSocket({
         onNote: (event) => this._handleNoteEvent(event),
         onPresence: (event) => this._handlePresenceEvent(event),
         onConnect: () => { this.wsConnected = true },
         onDisconnect: () => { this.wsConnected = false },
-      }, username)
+      }, username, token)
     },
 
     disconnect() {

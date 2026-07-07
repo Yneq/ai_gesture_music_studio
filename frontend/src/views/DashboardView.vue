@@ -73,7 +73,7 @@ function sendLeave() { publishPresenceLeave(auth.user?.username) }
 
 onMounted(async () => {
   window.addEventListener('beforeunload', sendLeave)
-  dashboard.connect(auth.user?.username)
+  dashboard.connect(auth.user?.username, auth.token)
   dashboard.fetchRecentGestures()
   dashboard.fetchLayouts()
   await nextTick()

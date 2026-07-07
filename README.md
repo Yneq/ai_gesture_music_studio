@@ -185,7 +185,7 @@ The final solution uses the official MediaPipe JavaScript SDK (`@mediapipe/tasks
 
 ## Known Limitations
 
-- **WebSocket unauthenticated**: The `/ws` endpoint is currently `permitAll` — anyone can connect to STOMP and subscribe to `/topic/notes` without logging in. REST API is protected by JWT, but `ChannelInterceptor` token validation for WebSocket is not yet implemented.
+- WebSocket auth is implemented via `JwtChannelInterceptor` — the frontend sends the JWT in the STOMP `CONNECT` frame header; the backend validates it before allowing the connection.
 
 ---
 

@@ -6,9 +6,10 @@ const WS_URL = import.meta.env.VITE_WS_BASE_URL || `${_proto}://${location.host}
 
 let stompClient = null
 
-export function connectWebSocket({ onNote, onPresence, onConnect, onDisconnect }, username) {
+export function connectWebSocket({ onNote, onPresence, onConnect, onDisconnect }, username, token) {
   stompClient = new Client({
     brokerURL: WS_URL,
+    connectHeaders: token ? { token } : {},
     reconnectDelay: 3000,
     onConnect: () => {
       stompClient.subscribe('/topic/notes', (message) => {
