@@ -17,6 +17,9 @@ const cameraRef = ref(null)
 const cameraStatus = ref('idle')
 const showLayoutEditor = ref(false)
 const showStats = ref(false)
+const isMobile = ref(window.innerWidth < 768)
+const activeTab = ref('notes')
+function onWindowResize() { isMobile.value = window.innerWidth < 768 }
 
 // ── Note particles (visualization) ───────────────────────────────────────────
 const noteParticles = ref([])
@@ -73,6 +76,7 @@ function sendLeave() { publishPresenceLeave(auth.user?.username) }
 
 onMounted(async () => {
   window.addEventListener('beforeunload', sendLeave)
+  window.addEventListener('resize', onWindowResize)
   dashboard.connect(auth.user?.username, auth.token)
   dashboard.fetchRecentGestures()
   dashboard.fetchLayouts()
@@ -83,6 +87,7 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   window.removeEventListener('beforeunload', sendLeave)
+  window.removeEventListener('resize', onWindowResize)
   sendLeave()
   dashboard.disconnect()
   stopJazzBg()
@@ -212,7 +217,7 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
 </script>
 
 <template>
-  <div class="h-screen flex flex-col overflow-hidden relative" @click.capture="autoEnableAudio">
+  <div class="flex flex-col min-h-screen md:h-screen md:overflow-hidden relative" @click.capture="autoEnableAudio">
 
     <!-- ── Background: same baroque orchestra as login ──────────────────────── -->
     <div class="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none"
@@ -234,7 +239,7 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
         <h1 style="font-family:'Georgia',serif;font-size:1.05rem;font-weight:700;letter-spacing:0.12em;color:#FFF5D6;text-shadow:0 0 20px rgba(212,175,55,0.3)">
           MAESTRO
         </h1>
-        <span style="color:rgba(212,175,55,0.3);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;padding-top:1px">
+        <span class="hidden sm:inline" style="color:rgba(212,175,55,0.3);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;padding-top:1px">
           AI Gesture Music Studio
         </span>
       </div>
@@ -259,7 +264,7 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
         </button>
 
         <!-- Online users (Figma-style stacked avatars) -->
-        <div v-if="dashboard.onlineUsers.length" class="flex items-center">
+        <div v-if="dashboard.onlineUsers.length" class="hidden sm:flex items-center">
           <div v-for="(user, i) in dashboard.onlineUsers.slice(0, 5)" :key="user"
             class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 relative"
             :style="`border:1.5px solid rgba(8,3,0,0.9);margin-left:${i===0?'0':'-6px'};z-index:${10-i};
@@ -292,7 +297,7 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
               {{ auth.user?.username?.charAt(0)?.toUpperCase() }}
             </span>
           </div>
-          <span style="color:rgba(212,175,55,0.65);font-size:0.8rem">{{ auth.user?.username }}</span>
+          <span class="hidden sm:inline" style="color:rgba(212,175,55,0.65);font-size:0.8rem">{{ auth.user?.username }}</span>
         </button>
         <button @click="logout"
           class="text-xs transition-colors px-3 py-1 rounded-lg"
@@ -305,7 +310,7 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
     </header>
 
     <!-- ── Main ─────────────────────────────────────────────────────────────── -->
-    <main ref="mainRef" class="relative z-10 flex-1 min-h-0 flex gap-0 p-3 overflow-hidden">
+    <main ref="mainRef" class="relative z-10 flex-1 flex flex-col md:flex-row gap-0 p-3 gap-y-3 md:gap-y-0 md:min-h-0 md:overflow-hidden">
 
       <!-- Note particles overlay -->
       <TransitionGroup tag="div"
@@ -320,8 +325,8 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
       </TransitionGroup>
 
       <!-- Left panel -->
-      <div :style="{ width: leftPct + '%' }"
-        class="shrink-0 min-h-0 rounded-2xl p-4 flex flex-col gap-3 overflow-hidden"
+      <div :style="isMobile ? {} : { width: leftPct + '%' }"
+        class="w-full md:w-auto md:shrink-0 md:min-h-0 md:overflow-hidden rounded-2xl p-4 flex flex-col gap-3"
         style="background:rgba(10,4,0,0.68);backdrop-filter:blur(20px);border:1px solid rgba(212,175,55,0.22);">
 
         <!-- Current note badge -->
@@ -418,7 +423,7 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
       </div>
 
       <!-- Drag handle -->
-      <div class="w-3 shrink-0 flex items-center justify-center cursor-col-resize group" @mousedown="onDragStart">
+      <div class="hidden md:flex w-3 shrink-0 items-center justify-center cursor-col-resize group" @mousedown="onDragStart">
         <div class="w-px h-10 rounded-full transition-colors"
           style="background:rgba(212,175,55,0.2)"
           @mouseenter="e=>e.target.style.background='rgba(212,175,55,0.7)'"
@@ -426,16 +431,37 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
       </div>
 
       <!-- Center + Right -->
-      <div class="flex-1 min-h-0 min-w-0 flex gap-3">
+      <div class="flex-1 min-w-0 flex flex-col gap-3 md:min-h-0">
+
+        <!-- Mobile tab bar -->
+        <div class="flex md:hidden gap-2 shrink-0">
+          <button @click="activeTab = 'notes'"
+            class="flex-1 py-2 text-xs font-bold rounded-xl transition-all"
+            :style="activeTab === 'notes'
+              ? 'background:linear-gradient(135deg,#7A5C0E,#D4AF37,#7A5C0E);color:#1A0800'
+              : 'background:rgba(255,240,200,0.07);border:1px solid rgba(212,175,55,0.22);color:rgba(212,175,55,0.6)'">
+            🎵 音符串流
+          </button>
+          <button @click="activeTab = 'gestures'"
+            class="flex-1 py-2 text-xs font-bold rounded-xl transition-all"
+            :style="activeTab === 'gestures'
+              ? 'background:linear-gradient(135deg,#7A5C0E,#D4AF37,#7A5C0E);color:#1A0800'
+              : 'background:rgba(255,240,200,0.07);border:1px solid rgba(212,175,55,0.22);color:rgba(212,175,55,0.6)'">
+            🤚 手勢紀錄
+          </button>
+        </div>
+
+        <div class="flex-1 flex flex-col md:flex-row gap-3 md:min-h-0">
 
         <!-- Note feed -->
-        <div class="flex-1 min-h-0 min-w-0 rounded-2xl p-4 flex flex-col gap-3"
+        <div v-show="!isMobile || activeTab === 'notes'"
+          class="flex-1 min-w-0 rounded-2xl p-4 flex flex-col gap-3 md:min-h-0"
           style="background:rgba(10,4,0,0.68);backdrop-filter:blur(20px);border:1px solid rgba(212,175,55,0.22);">
           <div class="flex items-center justify-between shrink-0">
             <span :style="LABEL_STYLE">即時音符串流</span>
             <span style="color:rgba(212,175,55,0.25);font-size:0.7rem">最近 20 筆</span>
           </div>
-          <div class="flex-1 min-h-0 overflow-y-auto flex flex-col-reverse gap-1.5 pr-1 maestro-scroll">
+          <div class="h-64 md:flex-1 md:min-h-0 overflow-y-auto flex flex-col-reverse gap-1.5 pr-1 maestro-scroll">
             <div v-for="event in dashboard.recentNotes" :key="event.id"
               class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm shrink-0"
               :style="event.type === 'presence'
@@ -472,7 +498,8 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
         </div>
 
         <!-- Gesture history -->
-        <div class="flex-1 min-h-0 min-w-0 rounded-2xl p-4 flex flex-col gap-3"
+        <div v-show="!isMobile || activeTab === 'gestures'"
+          class="flex-1 min-w-0 rounded-2xl p-4 flex flex-col gap-3 md:min-h-0"
           style="background:rgba(10,4,0,0.68);backdrop-filter:blur(20px);border:1px solid rgba(212,175,55,0.22);">
           <div class="flex items-center justify-between shrink-0">
             <span :style="LABEL_STYLE">指令手勢紀錄</span>
@@ -484,7 +511,7 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
               重新整理
             </button>
           </div>
-          <div class="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 maestro-scroll">
+          <div class="h-64 md:flex-1 md:min-h-0 overflow-y-auto space-y-1.5 pr-1 maestro-scroll">
             <div v-for="g in dashboard.recentGestures" :key="g.id"
               class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm"
               style="background:rgba(255,240,200,0.05);border:1px solid rgba(212,175,55,0.1)">
@@ -508,7 +535,8 @@ const LABEL_STYLE = 'color:rgba(212,175,55,0.5);font-size:0.65rem;letter-spacing
           </div>
         </div>
 
-      </div>
+        </div><!-- end panels wrapper -->
+      </div><!-- end center+right -->
     </main>
 
   </div>
